@@ -172,7 +172,8 @@ class Vulnerability(db.Model):
 
     id = db.Column('id', db.String, primary_key=True)
     description = db.Column('description', db.String, nullable=True)
-    severity = db.Column('severity', db.Float, nullable=True)
+    assigner = db.Column('assigner', db.String, nullable=False)
+    severity = db.Column('severity', db.String, nullable=True)
     exploitability = db.Column('exploitability', db.Float, nullable=True)
     impact = db.Column('impact', db.Float, nullable=True)
     published_date = db.Column('published_date', db.DateTime, nullable=False)
@@ -232,7 +233,19 @@ def shutdown_session(exception=None):
     db.session.remove()
 
 
-def init_db(tables_path, flask_app, logger):
+def init_db(uri: str, tables_path: Path, logger):
+    if not database_exists(uri):
+        try:
+            logger.info(f"Creating database")
+            create_database(url=uri, encoding='utf8')
+        except TypeError as te:
+            raise SatorError(f"Could not create database {uri.split('@')}. {te}")
+
+    db.create_all()
+    init_db_command(tables_path, logger)
+
+
+def init_flask_db(tables_path, flask_app, logger):
     uri = flask_app.config.get('SQLALCHEMY_DATABASE_URI', None)
 
     if not uri:
@@ -247,6 +260,8 @@ def init_db(tables_path, flask_app, logger):
 
     with flask_app.app_context():
         db.init_app(flask_app)
+
         db.create_all()
         init_db_command(tables_path, logger)
+
         flask_app.teardown_appcontext(shutdown_session)

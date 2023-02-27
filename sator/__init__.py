@@ -4,12 +4,13 @@ __version__ = pkg_resources.get_distribution('sator').version
 
 from flask import Flask
 from flask_graphql import GraphQLView
-
+from flask_cors import CORS
 from sator.core.graphql.schema import schema
 
 
 def create_flask_app(configs: dict):
     flask_app = Flask(__name__)
+    CORS(flask_app)
     flask_app.config.update(configs)
 
     @flask_app.route("/")

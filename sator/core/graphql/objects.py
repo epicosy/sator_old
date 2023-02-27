@@ -2,7 +2,14 @@ import graphene
 from graphene_sqlalchemy import SQLAlchemyObjectType
 from sator.core.models import CWE as CWEModel, Abstraction as AbstractionModel, Operation as OperationModel, \
     Phase as PhaseModel, BFClass as BFClassModel, CWEOperation as CWEOperationModel, CWEPhase as CWEPhaseModel, \
-    CWEBFClass as CWEBFClassModel
+    CWEBFClass as CWEBFClassModel, Vulnerability as VulnerabilityModel, VulnerabilityCWE as VulnerabilityCWEModel, \
+    Reference as ReferenceModel
+
+
+class Reference(SQLAlchemyObjectType):
+    class Meta:
+        model = ReferenceModel
+        use_connection = True
 
 
 class Abstraction(SQLAlchemyObjectType):
@@ -47,6 +54,42 @@ class CWEBFClass(SQLAlchemyObjectType):
     class Meta:
         model = CWEBFClassModel
         use_connection = True
+
+
+class VulnerabilityCWE(SQLAlchemyObjectType):
+    class Meta:
+        model = VulnerabilityCWEModel
+        use_connection = True
+
+
+class Vulnerability(SQLAlchemyObjectType):
+    class Meta:
+        model = VulnerabilityModel
+        use_connection = True
+
+    cwe_ids = graphene.List(lambda: CWE)
+    references = graphene.List(lambda: Reference)
+
+    def resolve_references(self, info):
+        references_query = Reference.get_query(info=info)
+        cwe_vuln_query = references_query.filter(ReferenceModel.vulnerability_id == self.id)
+
+        return cwe_vuln_query.all()
+
+    def resolve_cwe_ids(self, info):
+        cwe_vuln_query = VulnerabilityCWE.get_query(info=info)
+        cwe_vuln_query = cwe_vuln_query.filter(VulnerabilityCWEModel.vulnerability_id == self.id)
+
+        cwes = []
+        cwes_query = CWE.get_query(info=info)
+
+        for cwe_vuln in cwe_vuln_query.all():
+            cwe = cwes_query.filter(CWEModel.id == cwe_vuln.cwe_id)
+
+            if cwe.first():
+                cwes.append(cwe.first())
+
+        return cwes
 
 
 class CWE(SQLAlchemyObjectType):

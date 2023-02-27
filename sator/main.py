@@ -1,7 +1,11 @@
-from cement import App, TestApp, init_defaults
+from cement import App, TestApp
 from cement.core.exc import CaughtSignal
 from .core.exc import SatorError
 from .controllers.base import Base
+from pathlib import Path
+from sator.handlers.multi_task import MultiTaskHandler
+from sator.handlers.nvd import NVDHandler
+from sator.core.interfaces import HandlersInterface
 
 
 class Sator(App):
@@ -32,13 +36,36 @@ class Sator(App):
         # set the output handler
         output_handler = 'jinja2'
 
-        # register handlers
-        handlers = [
-            Base
+        interfaces = [
+            HandlersInterface
         ]
 
+        # register handlers
+        handlers = [
+            Base, MultiTaskHandler, NVDHandler
+        ]
 
-class SatorTest(TestApp,Sator):
+    def get_config(self, key: str):
+        if self.config.has_section(self.Meta.label):
+            if key in self.config.keys(self.Meta.label):
+                return self.config.get(self.Meta.label, key)
+
+        return None
+
+    def setup_working_dir(self):
+        if 'working_dir' in self.config.keys('sator'):
+            working_dir = Path(self.config.get('sator', 'working_dir')).expanduser()
+        else:
+            working_dir = Path.home().parent / 'sator'
+
+            if not working_dir.exists():
+                self.log.warning(f"Working directory not found in config file. Using default path: {working_dir}")
+
+        working_dir.mkdir(exist_ok=True, parents=True)
+        self.extend('working_dir', working_dir)
+
+
+class SatorTest(TestApp, Sator):
     """A sub-class of Sator that is better suited for testing."""
 
     class Meta:
@@ -48,6 +75,7 @@ class SatorTest(TestApp,Sator):
 def main():
     with Sator() as app:
         try:
+            app.setup_working_dir()
             app.run()
 
         except AssertionError as e:

@@ -3,15 +3,21 @@
 ## Installation
 
 ```
-$ pip install -r requirements.txt
-
-$ python setup.py install
+$ git clone https://github.com/epicosy/sator.git
+$ pip install .
+$ ./setup.sh
 ```
 
 ### Setting up database
 
 ```sh
 $ docker run --name sator_db -e POSTGRES_PASSWORD=user123 -e POSTGRES_USER=user1 -e POSTGRES_DB=sator -d -p 5432:5432 postgres
+```
+
+### Docker 
+```shell
+ $ docker build --network="host" . -t sator
+ $ docker run --name sator --network="host" sator
 ```
 
 ### Running server 
@@ -65,17 +71,4 @@ Then use the included helper function via the `Makefile`:
 $ make dist
 
 $ make dist-upload
-```
-
-## Deployments
-
-### Docker
-
-Included is a basic `Dockerfile` for building and distributing `vulnerability database`,
-and can be built with the included `make` helper:
-
-```
-$ make docker
-
-$ docker run -it sator --help
 ```

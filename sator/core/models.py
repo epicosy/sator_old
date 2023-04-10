@@ -1,3 +1,4 @@
+import hashlib
 import pandas as pd
 
 from pathlib import Path
@@ -152,7 +153,7 @@ class Tag(db.Model):
 class Reference(db.Model):
     __tablename__ = "reference"
 
-    id = db.Column('id', db.Integer, primary_key=True)
+    id = db.Column('id', db.String, primary_key=True)
     url = db.Column('url', db.String, nullable=False)
     vulnerability_id = db.Column(db.String, db.ForeignKey('vulnerability.id'))
 
@@ -163,8 +164,27 @@ class ReferenceTag(db.Model):
         db.PrimaryKeyConstraint('reference_id', 'tag_id'),
     )
 
-    reference_id = db.Column('reference_id', db.Integer, db.ForeignKey('reference.id'))
+    reference_id = db.Column('reference_id', db.String, db.ForeignKey('reference.id'))
     tag_id = db.Column('tag_id', db.Integer, db.ForeignKey('tag.id'))
+
+
+class Commit(db.Model):
+    __tablename__ = "commit"
+
+    id = db.Column('id', db.String, primary_key=True)
+    url = db.Column('url', db.String, nullable=False)
+    kind = db.Column('kind', db.String, nullable=False)
+    repository_id = db.Column(db.String, db.ForeignKey('repository.id'))
+    vulnerability_id = db.Column(db.String, db.ForeignKey('vulnerability.id'))
+
+
+class Repository(db.Model):
+    __tablename__ = "repository"
+
+    id = db.Column('id', db.String, primary_key=True)
+    name = db.Column('name', db.String, nullable=False)
+    owner = db.Column('owner', db.String, nullable=False)
+    commits = db.relationship("Commit", backref="repository")
 
 
 class Vulnerability(db.Model):
@@ -179,6 +199,7 @@ class Vulnerability(db.Model):
     published_date = db.Column('published_date', db.DateTime, nullable=False)
     last_modified_date = db.Column('last_modified_date', db.DateTime, nullable=False)
     references = db.relationship("Reference", backref="vulnerability")
+    configurations = db.relationship("Configuration", backref="vulnerability")
 
 
 class VulnerabilityCWE(db.Model):
@@ -189,6 +210,89 @@ class VulnerabilityCWE(db.Model):
 
     vulnerability_id = db.db.Column('vulnerability_id', db.String, db.ForeignKey('vulnerability.id'))
     cwe_id = db.db.Column('cwe_id', db.Integer, db.ForeignKey('cwe.id'))
+
+
+class Configuration(db.Model):
+    __tablename__ = "configuration"
+
+    id = db.Column('id', db.String, primary_key=True)
+    vulnerable = db.Column('vulnerable', db.Boolean, nullable=True)
+    part = db.Column('part', db.String, nullable=False)
+    version = db.Column('version', db.String, nullable=True)
+    update = db.Column('update', db.String, nullable=True)
+    edition = db.Column('edition', db.String, nullable=True)
+    language = db.Column('language', db.String, nullable=True)
+    sw_edition = db.Column('sw_edition', db.String, nullable=True)
+    target_sw = db.Column('target_sw', db.String, nullable=True)
+    target_hw = db.Column('target_hw', db.String, nullable=True)
+    other = db.Column('other', db.String, nullable=True)
+    vulnerability_id = db.Column(db.String, db.ForeignKey('vulnerability.id'))
+    vendor_id = db.Column(db.String, db.ForeignKey('vendor.id'))
+    product_id = db.Column(db.String, db.ForeignKey('product.id'))
+
+
+class Vendor(db.Model):
+    __tablename__ = "vendor"
+
+    id = db.Column('id', db.String, primary_key=True)
+    name = db.Column('name', db.String, nullable=False)
+    products = db.relationship("Product", backref="vendor")
+
+    @staticmethod
+    def populate(tables_path: Path):
+        vendors = pd.read_csv(f'{tables_path}/vendor_product_type.csv')['vendor'].unique()
+
+        for vendor in vendors:
+            vendor_id = hashlib.md5(vendor.encode('utf-8')).hexdigest()
+            db.session.add(Vendor(id=vendor_id, name=vendor))
+
+        db.session.commit()
+
+
+class Product(db.Model):
+    __tablename__ = "product"
+
+    id = db.Column('id', db.String, primary_key=True)
+    name = db.Column('name', db.String, nullable=False)
+    vendor_id = db.Column(db.String, db.ForeignKey('vendor.id'))
+    product_type_id = db.Column(db.Integer, db.ForeignKey('product_type.id'))
+    configurations = db.relationship("Configuration", backref="product")
+
+    @staticmethod
+    def populate(tables_path: Path):
+        vendor_product_type = pd.read_csv(f'{tables_path}/vendor_product_type.csv')
+
+        for g, _ in vendor_product_type.groupby(['vendor', 'product', 'product_type']):
+            vendor, product, product_type = g
+            vendor_id = hashlib.md5(vendor.encode('utf-8')).hexdigest()
+            product_id = hashlib.md5(f"{vendor}:{product}".encode('utf-8')).hexdigest()
+            db.session.add(Product(id=product_id, name=product, vendor_id=vendor_id, product_type_id=int(product_type)))
+
+        db.session.commit()
+
+
+class ProductType(db.Model):
+    __tablename__ = "product_type"
+
+    id = db.Column('id', db.Integer, primary_key=True)
+    name = db.Column('name', db.String, nullable=False)
+    products = db.relationship("Product", backref="product_type")
+
+    @staticmethod
+    def populate(tables_path: Path):
+        product_types_df = pd.read_csv(f'{tables_path}/product_type.csv')
+        db.session.add_all([ProductType(**row.to_dict()) for i, row in product_types_df.iterrows()])
+        db.session.commit()
+
+
+class ConfigurationVulerability(db.Model):
+    __tablename__ = 'configuration_vulnerability'
+    __table_args__ = (
+        db.PrimaryKeyConstraint('configuration_id', 'vulnerability_id'),
+    )
+
+    configuration_id = db.Column('configuration_id', db.String, db.ForeignKey('configuration.id'))
+    vulnerability_id = db.Column('vulnerability_id', db.String, db.ForeignKey('vulnerability.id'))
 
 
 def init_db_command(tables_path: Path, logger):
@@ -227,6 +331,18 @@ def init_db_command(tables_path: Path, logger):
 
     if not CWEBFClass.query.all():
         CWEBFClass.populate(tables_path)
+
+    if not ProductType.query.all():
+        ProductType.populate(tables_path)
+        logger.info("Populated 'product_types' table.")
+
+    if not Vendor.query.all():
+        Vendor.populate(tables_path)
+        logger.info("Populated 'vendors' table.")
+
+    if not Product.query.all():
+        Product.populate(tables_path)
+        logger.info("Populated 'products' table.")
 
 
 def shutdown_session(exception=None):

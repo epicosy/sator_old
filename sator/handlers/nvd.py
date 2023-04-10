@@ -1,15 +1,17 @@
 import json
-from typing import Tuple, List
 
 import pandas as pd
 
 from sqlalchemy.exc import IntegrityError
 from tqdm import tqdm
 from pathlib import Path
+from flask.ctx import AppContext
+from cpeparser import CpeParser
 
-from sator.core.models import Vulnerability, VulnerabilityCWE, Reference, ReferenceTag, Tag, CWE
+from sator.core.exc import SatorError
+from sator.core.models import Vulnerability, db, Reference, VulnerabilityCWE, ReferenceTag, Repository, \
+    Commit, Configuration, ConfigurationVulerability, Vendor, Product
 from sator.handlers.source import SourceHandler
-from sator.core.models import db
 
 
 class NVDHandler(SourceHandler):
@@ -18,17 +20,9 @@ class NVDHandler(SourceHandler):
 
     def __init__(self, **kw):
         super().__init__(**kw)
-        self.tag_ids = {}
-        self.cwe_ids = []
 
     def run(self):
         base_url = 'https://nvd.nist.gov/feeds/json/cve/1.1/nvdcve-1.1-{year}.json.zip'
-        with self.app.flask_app.app_context():
-            for tag in Tag.query.all():
-                self.tag_ids[tag.name] = tag.id
-
-            for cwe in CWE.query.all():
-                self.cwe_ids.append(cwe.id)
 
         # download from source and extract
         for year in tqdm(range(1988, 2024, 1)):
@@ -39,47 +33,124 @@ class NVDHandler(SourceHandler):
         results = self.multi_task_handler.results()
         del self.multi_task_handler
 
+        with self.app.flask_app.app_context():
+            self.init_global_context()
+
         # parse json files into a single dataframe
         for _, file_path in tqdm(results):
-            self.multi_task_handler.add(file_path=file_path)
+            self.multi_task_handler.add(file_path=file_path, context=self.app.flask_app.app_context())
 
         self.multi_task_handler(func=self.parse)
         self.multi_task_handler.results()
 
-        #if normalize:
-        #    df = self.normalize(df, 'github')
-
-    def parse(self, file_path: Path):
+    def parse(self, file_path: Path, context: AppContext):
         self.app.log.info(f"Parsing {file_path}...")
 
         with file_path.open(mode='r') as f:
             cve_ids = json.load(f)["CVE_Items"]
 
-            for cve in cve_ids:
-                cve_id = self.get_cve(cve)
+            with context:
+                for cve in tqdm(cve_ids, desc=f"Parsing {file_path}"):
+                    cve_id = self.get_cve(cve)
 
-                with self.app.flask_app.app_context():
                     try:
-                        # TODO: should look for existing records and update them
-                        db.session.add(Vulnerability(id=cve_id, description=self.get_description(cve),
-                                                     assigner=self.get_assigner(cve),
-                                                     severity=self.get_severity(cve), impact=self.get_impact(cve),
-                                                     exploitability=self.get_exploitability(cve),
-                                                     published_date=self.get_published_date(cve),
-                                                     last_modified_date=self.get_last_modified_date(cve)))
-
-                        for cwe in self.get_cwe_ids(cve):
-                            if cwe in self.cwe_ids:
-                                db.session.add(VulnerabilityCWE(vulnerability_id=cve_id, cwe_id=cwe))
-
-                        for ref in self.get_references(cve):
-                            db.session.add(Reference(url=ref['url'], vulnerability_id=cve_id))
-
-                            #for tag in ref['tags']:
-                            #    db.session.add(ReferenceTag(reference_id=ref_id, tag_id=self.tag_ids[tag]))
-                        db.session.commit()
+                        self._process_cve(cve_id=cve_id, cve=cve)
                     except IntegrityError as ie:
                         self.app.log.warning(f"{ie}")
+
+    def _process_cve(self, cve_id: str, cve: dict):
+        if not self.has_id(cve_id, 'vulns'):
+            self.add_id(cve_id, 'vulns')
+            db.session.add(Vulnerability(id=cve_id, description=self.get_description(cve),
+                                         assigner=self.get_assigner(cve), severity=self.get_severity(cve),
+                                         impact=self.get_impact(cve), exploitability=self.get_exploitability(cve),
+                                         published_date=self.get_published_date(cve),
+                                         last_date_modified=self.get_last_modified_date(cve)))
+            db.session.commit()
+
+            for cwe in self.get_cwe_ids(cve):
+                if cwe in self.cwe_ids:
+                    db.session.add(VulnerabilityCWE(vulnerability_id=cve_id, cwe_id=cwe))
+
+            db.session.commit()
+
+        for ref in self.get_references(cve):
+            ref_digest = self.get_digest(ref['url'])
+
+            if not self.has_id(ref_digest, 'refs'):
+                self.add_id(ref_digest, 'refs')
+                db.session.add(Reference(id=ref_digest, url=ref['url'], vulnerability_id=cve_id))
+                db.session.commit()
+
+                for tag in ref['tags']:
+                    db.session.add(ReferenceTag(reference_id=ref_digest, tag_id=self.tag_ids[tag]))
+                db.session.commit()
+
+            if self.is_commit_reference(ref['url']):
+
+                try:
+                    clean_ref, sha = self.normalize_commit(ref['url'])
+                    owner, repo = self.extract_owner_repo(clean_ref)
+                    repo_digest = self.get_digest(f"{owner}/{repo}")
+
+                    if not self.has_id(repo_digest, 'repos'):
+                        self.add_id(repo_digest, 'repos')
+                        db.session.add(Repository(id=repo_digest, name=repo, owner=owner))
+                        db.session.commit()
+
+                    if not self.has_id(sha, 'commits'):
+                        self.add_id(sha, 'commits')
+                        db.session.add(Commit(id=sha, url=clean_ref, kind='|'.join(ref['tags']),
+                                              vulnerability_id=cve_id, repository_id=repo_digest))
+                        db.session.commit()
+
+                except SatorError:
+                    continue
+
+            configurations = self.get_configs(cve)
+
+            for raw_config in configurations:
+                config = self.parse_config(raw_config)
+                config_digest = self.get_digest(config['cpe'])
+
+                if not self.has_id(config_digest, 'configs'):
+                    self.add_id(config_digest, 'configs')
+
+                    vendor_digest = self.get_digest(config['vendor'])
+
+                    if not self.has_id(vendor_digest, 'vendors'):
+                        self.add_id(vendor_digest, 'vendors')
+                        db.session.add(Vendor(id=vendor_digest, name=config['vendor']))
+                        db.session.commit()
+
+                    product_digest = self.get_digest(f"{config['vendor']}:{config['product']}")
+
+                    if not self.has_id(product_digest, 'products'):
+                        self.add_id(product_digest, 'products')
+                        db.session.add(Product(id=product_digest, name=config['product'], vendor_id=vendor_digest,
+                                               product_type_id=8))
+                        db.session.commit()
+
+                    db.session.add(Configuration(id=config_digest, vulnerable=config['vulnerable'],
+                                                 part=config['part'], version=config['version'],
+                                                 update=config['update'], edition=config['edition'],
+                                                 language=config['language'], sw_edition=config['sw_edition'],
+                                                 target_sw=config['target_sw'], target_hw=config['target_hw'],
+                                                 other=config['other'], vulnerability_id=cve_id,
+                                                 vendor_id=vendor_digest, product_id=product_digest))
+                    db.session.commit()
+                    db.session.add(ConfigurationVulerability(configuration_id=config_digest,
+                                                             vulnerability_id=cve_id))
+                    db.session.commit()
+
+    @staticmethod
+    def parse_config(config: dict):
+        cpe = CpeParser()
+        result = cpe.parser(config['cpe23Uri'])
+        result['vulnerable'] = config.get('vulnerable', None)
+        result['cpe'] = config['cpe23Uri']
+
+        return result
 
     @staticmethod
     def get_cwe_ids(cve):
@@ -149,6 +220,16 @@ class NVDHandler(SourceHandler):
                 refs_list.append(ref)
 
         return refs_list
+
+    @staticmethod
+    def get_configs(data):
+        configs = []
+
+        for node in data['configurations']['nodes']:
+            for cpe in node['cpe_match']:
+                configs.append(cpe)
+
+        return configs
 
 
 def load(app):

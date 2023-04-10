@@ -3,12 +3,95 @@ from graphene_sqlalchemy import SQLAlchemyObjectType
 from sator.core.models import CWE as CWEModel, Abstraction as AbstractionModel, Operation as OperationModel, \
     Phase as PhaseModel, BFClass as BFClassModel, CWEOperation as CWEOperationModel, CWEPhase as CWEPhaseModel, \
     CWEBFClass as CWEBFClassModel, Vulnerability as VulnerabilityModel, VulnerabilityCWE as VulnerabilityCWEModel, \
-    Reference as ReferenceModel
+    Reference as ReferenceModel, Commit as CommitModel, ReferenceTag as ReferenceTagModel, Tag as TagModel, \
+    Repository as RepositoryModel, Configuration as ConfigurationModel, Vendor as VendorModel, Product as ProductModel
+
+
+class Product(SQLAlchemyObjectType):
+    class Meta:
+        model = ProductModel
+        use_connection = True
+
+    configurations = graphene.List(lambda: Configuration)
+    configurations_count = graphene.Int()
+    vulnerabilities_count = graphene.Int()
+
+    def resolve_configurations(self, info):
+        return self.configurations
+
+    def resolve_configurations_count(self, info):
+        return len(self.configurations)
+
+    def resolve_vulnerabilities_count(self, info):
+        return len(set([config.vulnerability_id for config in self.configurations]))
+
+
+class Vendor(SQLAlchemyObjectType):
+    class Meta:
+        model = VendorModel
+        use_connection = True
+
+    products = graphene.List(lambda: Product)
+    products_count = graphene.Int()
+    configurations = graphene.List(lambda: Configuration)
+    configurations_count = graphene.Int()
+    vulnerabilities_count = graphene.Int()
+
+    def resolve_products_count(self, info):
+        return len(self.products)
+
+    def resolve_configurations(self, info):
+        return [config for product in self.products for config in product.configurations]
+
+    def resolve_configurations_count(self, info):
+        return len([config for product in self.products for config in product.configurations])
+
+    def resolve_vulnerabilities_count(self, info):
+        return len(set([config.vulnerability_id for product in self.products for config in product.configurations]))
+
+
+class Configuration(SQLAlchemyObjectType):
+    class Meta:
+        model = ConfigurationModel
+        use_connection = True
+
+
+class Repository(SQLAlchemyObjectType):
+    class Meta:
+        model = RepositoryModel
+        use_connection = True
+
+    commits = graphene.List(lambda: Commit)
+    commits_count = graphene.Int()
+
+    def resolve_commits(self, info):
+        return self.commits
+
+    def resolve_commits_count(self, info):
+        return len(self.commits)
+
+
+class Tag(SQLAlchemyObjectType):
+    class Meta:
+        model = TagModel
+        use_connection = True
 
 
 class Reference(SQLAlchemyObjectType):
     class Meta:
         model = ReferenceModel
+        use_connection = True
+
+
+class ReferenceTag(SQLAlchemyObjectType):
+    class Meta:
+        model = ReferenceTagModel
+        use_connection = True
+
+
+class Commit(SQLAlchemyObjectType):
+    class Meta:
+        model = CommitModel
         use_connection = True
 
 

@@ -6,6 +6,7 @@ from pathlib import Path
 from sator.handlers.multi_task import MultiTaskHandler
 from sator.handlers.nvd import NVDHandler
 from sator.core.interfaces import HandlersInterface
+from sator.handlers.github import GithubHandler
 
 
 class Sator(App):
@@ -42,7 +43,7 @@ class Sator(App):
 
         # register handlers
         handlers = [
-            Base, MultiTaskHandler, NVDHandler
+            Base, MultiTaskHandler, NVDHandler, GithubHandler
         ]
 
     def get_config(self, key: str):

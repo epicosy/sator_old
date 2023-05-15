@@ -10,8 +10,10 @@ from cpeparser import CpeParser
 
 from sator.core.exc import SatorError
 from sator.core.models import Vulnerability, db, Reference, VulnerabilityCWE, ReferenceTag, Repository, \
-    Commit, Configuration, ConfigurationVulerability, Vendor, Product
+    Commit, Configuration, ConfigurationVulnerability, Vendor, Product
 from sator.handlers.source import SourceHandler
+
+# TODO: Get metrics for version 3.0
 
 
 class NVDHandler(SourceHandler):
@@ -65,7 +67,7 @@ class NVDHandler(SourceHandler):
                                          assigner=self.get_assigner(cve), severity=self.get_severity(cve),
                                          impact=self.get_impact(cve), exploitability=self.get_exploitability(cve),
                                          published_date=self.get_published_date(cve),
-                                         last_date_modified=self.get_last_modified_date(cve)))
+                                         last_modified_date=self.get_last_modified_date(cve)))
             db.session.commit()
 
             for cwe in self.get_cwe_ids(cve):
@@ -89,19 +91,21 @@ class NVDHandler(SourceHandler):
             if self.is_commit_reference(ref['url']):
 
                 try:
-                    clean_ref, sha = self.normalize_commit(ref['url'])
-                    owner, repo = self.extract_owner_repo(clean_ref)
-                    repo_digest = self.get_digest(f"{owner}/{repo}")
+                    normalized_commit = self.normalize_commit(ref['url'])
+                    commit_digest = self.get_digest(normalized_commit.url)
+                    repo_digest = self.get_digest(f"{normalized_commit.owner}/{normalized_commit.repo}")
 
                     if not self.has_id(repo_digest, 'repos'):
                         self.add_id(repo_digest, 'repos')
-                        db.session.add(Repository(id=repo_digest, name=repo, owner=owner))
+                        db.session.add(Repository(id=repo_digest, name=normalized_commit.repo,
+                                                  owner=normalized_commit.owner))
                         db.session.commit()
 
-                    if not self.has_id(sha, 'commits'):
-                        self.add_id(sha, 'commits')
-                        db.session.add(Commit(id=sha, url=clean_ref, kind='|'.join(ref['tags']),
-                                              vulnerability_id=cve_id, repository_id=repo_digest))
+                    if not self.has_id(commit_digest, 'commits'):
+                        self.add_id(commit_digest, 'commits')
+                        db.session.add(Commit(id=commit_digest, url=normalized_commit.url, sha=normalized_commit.sha,
+                                              kind='|'.join(ref['tags']), vulnerability_id=cve_id,
+                                              repository_id=repo_digest))
                         db.session.commit()
 
                 except SatorError:
@@ -112,6 +116,7 @@ class NVDHandler(SourceHandler):
             for raw_config in configurations:
                 config = self.parse_config(raw_config)
                 config_digest = self.get_digest(config['cpe'])
+                config_vuln = f"{config_digest}_{cve_id}"
 
                 if not self.has_id(config_digest, 'configs'):
                     self.add_id(config_digest, 'configs')
@@ -130,7 +135,8 @@ class NVDHandler(SourceHandler):
                         db.session.add(Product(id=product_digest, name=config['product'], vendor_id=vendor_digest,
                                                product_type_id=8))
                         db.session.commit()
-
+                    # TODO: the vulnerablity_id should not be part of the Configuration since configurations can occur
+                    #  in multiple vulnerabilities
                     db.session.add(Configuration(id=config_digest, vulnerable=config['vulnerable'],
                                                  part=config['part'], version=config['version'],
                                                  update=config['update'], edition=config['edition'],
@@ -139,8 +145,14 @@ class NVDHandler(SourceHandler):
                                                  other=config['other'], vulnerability_id=cve_id,
                                                  vendor_id=vendor_digest, product_id=product_digest))
                     db.session.commit()
-                    db.session.add(ConfigurationVulerability(configuration_id=config_digest,
-                                                             vulnerability_id=cve_id))
+                    db.session.add(ConfigurationVulnerability(configuration_id=config_digest,
+                                                              vulnerability_id=cve_id))
+                    self.add_id(config_vuln, 'config_vuln')
+                    db.session.commit()
+
+                if not self.has_id(config_vuln, 'config_vuln'):
+                    db.session.add(ConfigurationVulnerability(configuration_id=config_digest, vulnerability_id=cve_id))
+                    self.add_id(config_vuln, 'config_vuln')
                     db.session.commit()
 
     @staticmethod

@@ -1,4 +1,6 @@
 import hashlib
+from typing import List
+
 import pandas as pd
 
 from pathlib import Path
@@ -172,10 +174,47 @@ class Commit(db.Model):
     __tablename__ = "commit"
 
     id = db.Column('id', db.String, primary_key=True)
+    sha = db.Column('sha', db.String, nullable=False)
     url = db.Column('url', db.String, nullable=False)
     kind = db.Column('kind', db.String, nullable=False)
+    date = db.Column('date', db.DateTime, nullable=True)
+    state = db.Column('state', db.String, nullable=True)
+    author = db.Column('author', db.String, nullable=True)
+    message = db.Column('message', db.String, nullable=True)
+    changes = db.Column('changes', db.Integer, nullable=True)
+    available = db.Column('available', db.Boolean, nullable=True)
+    additions = db.Column('additions', db.Integer, nullable=True)
+    deletions = db.Column('deletions', db.Integer, nullable=True)
+    files_count = db.Column('files_count', db.Integer, nullable=True)
+    parents_count = db.Column('parents_count', db.Integer, nullable=True)
     repository_id = db.Column(db.String, db.ForeignKey('repository.id'))
     vulnerability_id = db.Column(db.String, db.ForeignKey('vulnerability.id'))
+    files = db.relationship("CommitFile", backref="commit")
+
+
+class CommitFile(db.Model):
+    __tablename__ = "commit_file"
+
+    id = db.Column('id', db.String, primary_key=True)
+    filename = db.Column('filename', db.String, nullable=False)
+    additions = db.Column('additions', db.Integer, nullable=False)
+    deletions = db.Column('deletions', db.Integer, nullable=False)
+    changes = db.Column('changes', db.Integer, nullable=False)
+    status = db.Column('status', db.String, nullable=False)
+    extension = db.Column('extension', db.String, nullable=True)
+    patch = db.Column('patch', db.String, nullable=True)
+    raw_url = db.Column('raw_url', db.String, nullable=True)
+    commit_id = db.Column(db.String, db.ForeignKey('commit.id'))
+
+
+class CommitParent(db.Model):
+    __tablename__ = "commit_parent"
+    __table_args__ = (
+        db.PrimaryKeyConstraint('commit_id', 'parent_id'),
+    )
+
+    commit_id = db.Column('commit_id', db.String, db.ForeignKey('commit.id'))
+    parent_id = db.Column('parent_id', db.String, db.ForeignKey('commit.id'))
 
 
 class Repository(db.Model):
@@ -184,7 +223,34 @@ class Repository(db.Model):
     id = db.Column('id', db.String, primary_key=True)
     name = db.Column('name', db.String, nullable=False)
     owner = db.Column('owner', db.String, nullable=False)
+    available = db.Column('available', db.Boolean, nullable=True)
+    description = db.Column('description', db.String, nullable=True)
+    language = db.Column('language', db.String, nullable=True)
     commits = db.relationship("Commit", backref="repository")
+
+
+class Topic(db.Model):
+    __tablename__ = "topic"
+
+    id = db.Column('id', db.String, primary_key=True)
+    name = db.Column('name', db.String, nullable=False)
+    repositories = db.relationship("Repository", secondary="repository_topic", backref='topics')
+
+    @staticmethod
+    def populate(tables_path: Path):
+        topics_df = pd.read_csv(f'{tables_path}/topics.csv')
+        db.session.add_all([Topic(**row.to_dict()) for i, row in topics_df.iterrows()])
+        db.session.commit()
+
+
+class RepositoryTopic(db.Model):
+    __tablename__ = 'repository_topic'
+    __table_args__ = (
+        db.PrimaryKeyConstraint('repository_id', 'topic_id'),
+    )
+
+    repository_id = db.Column('repository_id', db.String, db.ForeignKey('repository.id'))
+    topic_id = db.Column('topic_id', db.String, db.ForeignKey('topic.id'))
 
 
 class Vulnerability(db.Model):
@@ -210,6 +276,22 @@ class VulnerabilityCWE(db.Model):
 
     vulnerability_id = db.db.Column('vulnerability_id', db.String, db.ForeignKey('vulnerability.id'))
     cwe_id = db.db.Column('cwe_id', db.Integer, db.ForeignKey('cwe.id'))
+
+
+class Grouping(db.Model):
+    __tablename__ = "grouping"
+    __table_args__ = (
+        db.PrimaryKeyConstraint('parent_id', 'child_id'),
+    )
+
+    parent_id = db.Column('parent_id', db.Integer, db.ForeignKey('cwe.id'))
+    child_id = db.Column('child_id', db.Integer, db.ForeignKey('cwe.id'))
+
+    @staticmethod
+    def populate(tables_path: Path):
+        grouping_df = pd.read_csv(f'{tables_path}/groupings.csv')
+        db.session.add_all([Grouping(**row.to_dict()) for i, row in grouping_df.iterrows()])
+        db.session.commit()
 
 
 class Configuration(db.Model):
@@ -285,7 +367,7 @@ class ProductType(db.Model):
         db.session.commit()
 
 
-class ConfigurationVulerability(db.Model):
+class ConfigurationVulnerability(db.Model):
     __tablename__ = 'configuration_vulnerability'
     __table_args__ = (
         db.PrimaryKeyConstraint('configuration_id', 'vulnerability_id'),
@@ -293,6 +375,40 @@ class ConfigurationVulerability(db.Model):
 
     configuration_id = db.Column('configuration_id', db.String, db.ForeignKey('configuration.id'))
     vulnerability_id = db.Column('vulnerability_id', db.String, db.ForeignKey('vulnerability.id'))
+
+
+class Dataset(db.Model):
+    __tablename__ = "dataset"
+
+    id = db.Column('id', db.Integer, primary_key=True)
+    name = db.Column('name', db.String, nullable=False)
+    description = db.Column('description', db.String, nullable=True)
+
+    def save(self):
+        db.session.add(self)
+        db.session.commit()
+
+    def remove(self):
+        db.session.delete(self)
+        db.session.commit()
+
+
+class DatasetVulnerability(db.Model):
+    __tablename__ = 'dataset_vulnerability'
+    __table_args__ = (
+        db.PrimaryKeyConstraint('dataset_id', 'vulnerability_id'),
+    )
+
+    dataset_id = db.Column('dataset_id', db.Integer, db.ForeignKey('dataset.id'))
+    vulnerability_id = db.Column('vulnerability_id', db.String, db.ForeignKey('vulnerability.id'))
+
+    def save(self):
+        db.session.add(self)
+        db.session.commit()
+
+    def remove(self):
+        db.session.delete(self)
+        db.session.commit()
 
 
 def init_db_command(tables_path: Path, logger):
@@ -343,6 +459,10 @@ def init_db_command(tables_path: Path, logger):
     if not Product.query.all():
         Product.populate(tables_path)
         logger.info("Populated 'products' table.")
+
+    if not Grouping.query.all():
+        Grouping.populate(tables_path)
+        logger.info("Populated 'groupings' table.")
 
 
 def shutdown_session(exception=None):

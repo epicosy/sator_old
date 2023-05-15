@@ -1,10 +1,82 @@
 import graphene
+
 from graphene_sqlalchemy import SQLAlchemyObjectType
 from sator.core.models import CWE as CWEModel, Abstraction as AbstractionModel, Operation as OperationModel, \
     Phase as PhaseModel, BFClass as BFClassModel, CWEOperation as CWEOperationModel, CWEPhase as CWEPhaseModel, \
     CWEBFClass as CWEBFClassModel, Vulnerability as VulnerabilityModel, VulnerabilityCWE as VulnerabilityCWEModel, \
     Reference as ReferenceModel, Commit as CommitModel, ReferenceTag as ReferenceTagModel, Tag as TagModel, \
-    Repository as RepositoryModel, Configuration as ConfigurationModel, Vendor as VendorModel, Product as ProductModel
+    Repository as RepositoryModel, Configuration as ConfigurationModel, Vendor as VendorModel, Product as ProductModel,\
+    CommitFile as CommitFileModel, ProductType as ProductTypeModel, RepositoryTopic as RepositoryTopicModel, \
+    Topic as TopicModel, ConfigurationVulnerability as ConfigurationVulnerabilityModel, Grouping as GroupingModel, \
+    Dataset as DatasetModel, DatasetVulnerability as DatasetVulnerabilityModel
+
+
+class DatasetVulnerability(SQLAlchemyObjectType):
+    class Meta:
+        model = DatasetVulnerabilityModel
+        use_connection = True
+
+
+class Dataset(SQLAlchemyObjectType):
+    class Meta:
+        model = DatasetModel
+        use_connection = True
+
+    id = graphene.Int()
+    name = graphene.String()
+    description = graphene.String()
+    vulnerabilities = graphene.List(lambda: Vulnerability)
+    size = graphene.Int()
+
+    def resolve_vulnerabilities(self, info):
+        vuln_ids = DatasetVulnerability.get_query(info).filter_by(dataset_id=self.id).all()
+        return Vulnerability.get_query(info).filter(VulnerabilityModel.id.in_([vuln.vulnerability_id for vuln in vuln_ids])).all()
+
+    def resolve_id(self, info):
+        return self.id
+
+    def resolve_name(self, info):
+        return self.name
+
+    def resolve_description(self, info):
+        return self.description
+
+    def resolve_size(self, info):
+        vuln_ids = DatasetVulnerability.get_query(info).filter_by(dataset_id=self.id).all()
+        return len(vuln_ids)
+
+
+class Grouping(SQLAlchemyObjectType):
+    class Meta:
+        model = GroupingModel
+        use_connection = True
+
+
+class RepositoryTopic(SQLAlchemyObjectType):
+    class Meta:
+        model = RepositoryTopicModel
+        use_connection = True
+
+
+class Topic(SQLAlchemyObjectType):
+    class Meta:
+        model = TopicModel
+        use_connection = True
+
+    def resolve_name(self, info):
+        return self.name
+
+
+class CommitFile(SQLAlchemyObjectType):
+    class Meta:
+        model = CommitFileModel
+        use_connection = True
+
+
+class ProductType(SQLAlchemyObjectType):
+    class Meta:
+        model = ProductTypeModel
+        use_connection = True
 
 
 class Product(SQLAlchemyObjectType):
@@ -12,9 +84,13 @@ class Product(SQLAlchemyObjectType):
         model = ProductModel
         use_connection = True
 
+    sw_type = graphene.String()
     configurations = graphene.List(lambda: Configuration)
     configurations_count = graphene.Int()
     vulnerabilities_count = graphene.Int()
+
+    def resolve_sw_type(self, info):
+        return ProductType.get_query(info).filter(self.product_type_id == ProductTypeModel.id).first().name
 
     def resolve_configurations(self, info):
         return self.configurations
@@ -56,6 +132,18 @@ class Configuration(SQLAlchemyObjectType):
         use_connection = True
 
 
+class ConfigurationVulnerability(SQLAlchemyObjectType):
+    class Meta:
+        model = ConfigurationVulnerabilityModel
+        use_connection = True
+
+
+class Commit(SQLAlchemyObjectType):
+    class Meta:
+        model = CommitModel
+        use_connection = True
+
+
 class Repository(SQLAlchemyObjectType):
     class Meta:
         model = RepositoryModel
@@ -63,12 +151,17 @@ class Repository(SQLAlchemyObjectType):
 
     commits = graphene.List(lambda: Commit)
     commits_count = graphene.Int()
+    topics = graphene.List(graphene.String)
+
+    def resolve_topics(self, info):
+        topic_ids = [t.topic_id for t in RepositoryTopic.get_query(info).filter(RepositoryTopicModel.repository_id == self.id).all()]
+        return [t.name for t in Topic.get_query(info).filter(TopicModel.id.in_(topic_ids)).all()]
 
     def resolve_commits(self, info):
         return self.commits
 
     def resolve_commits_count(self, info):
-        return len(self.commits)
+        return len([c for c in self.commits if c.kind != "parent"])
 
 
 class Tag(SQLAlchemyObjectType):
@@ -86,12 +179,6 @@ class Reference(SQLAlchemyObjectType):
 class ReferenceTag(SQLAlchemyObjectType):
     class Meta:
         model = ReferenceTagModel
-        use_connection = True
-
-
-class Commit(SQLAlchemyObjectType):
-    class Meta:
-        model = CommitModel
         use_connection = True
 
 

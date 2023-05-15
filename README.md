@@ -11,7 +11,7 @@ $ ./setup.sh
 ### Setting up database
 
 ```sh
-$ docker run --name sator_db -e POSTGRES_PASSWORD=user123 -e POSTGRES_USER=user1 -e POSTGRES_DB=sator -d -p 5432:5432 postgres
+$ docker run --shm-size 128MB --name sator_db -e POSTGRES_PASSWORD=user123 -e POSTGRES_USER=user1 -e POSTGRES_DB=sator -d -p 5432:5432 postgres
 ```
 
 ### Docker 

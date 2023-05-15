@@ -64,7 +64,6 @@ class Base(Controller):
         help='Gets data from NVD'
     )
     def nvd(self):
-
         if self.app.config.has_section('flask'):
             flask_configs = {k.upper(): v for k, v in self.app.config.get_dict()['flask'].items()}
         else:
@@ -92,3 +91,36 @@ class Base(Controller):
 
         nvd_handler = self.app.handler.get('handlers', 'nvd', setup=True)
         nvd_handler.run()
+
+    @ex(
+        help='Gets data from GitHub',
+        arguments=[
+            (['-gt', '--tokens'], {'help': 'Comma-separated list of tokens for the GitHub API.', 'type': str,
+                                   'required': True}),
+        ]
+    )
+    def metadata(self):
+        """Example sub-command."""
+
+        if self.app.config.has_section('flask'):
+            flask_configs = {k.upper(): v for k, v in self.app.config.get_dict()['flask'].items()}
+        else:
+            flask_configs = {}
+
+        if 'RUN_PORT' not in flask_configs:
+            flask_configs['RUN_PORT'] = 3000
+            self.app.log.warning("No port number specified, setting default port number to '3000'")
+
+        if 'DEBUG' not in flask_configs:
+            flask_configs['DEBUG'] = self.app.config.get('sator', 'debug')
+
+        flask_app = create_flask_app(configs=flask_configs)
+
+        # setup database
+        tables_path = Path(__file__).parent.parent / 'config' / 'tables'
+        from sator.core.models import init_flask_db
+        init_flask_db(tables_path, flask_app, self.app.log)
+
+        self.app.extend('flask_app', flask_app)
+        nvd_handler = self.app.handler.get('handlers', 'nvd', setup=True)
+        nvd_handler.add_metadata()

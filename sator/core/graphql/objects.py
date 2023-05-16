@@ -8,7 +8,13 @@ from sator.core.models import CWE as CWEModel, Abstraction as AbstractionModel, 
     Repository as RepositoryModel, Configuration as ConfigurationModel, Vendor as VendorModel, Product as ProductModel,\
     CommitFile as CommitFileModel, ProductType as ProductTypeModel, RepositoryTopic as RepositoryTopicModel, \
     Topic as TopicModel, ConfigurationVulnerability as ConfigurationVulnerabilityModel, Grouping as GroupingModel, \
-    Dataset as DatasetModel, DatasetVulnerability as DatasetVulnerabilityModel
+    Dataset as DatasetModel, DatasetVulnerability as DatasetVulnerabilityModel, Line as LineModel
+
+
+class Line(SQLAlchemyObjectType):
+    class Meta:
+        model = LineModel
+        use_connection = True
 
 
 class DatasetVulnerability(SQLAlchemyObjectType):
@@ -75,6 +81,11 @@ class CommitFile(SQLAlchemyObjectType):
     id = graphene.String()
     filename = graphene.String()
     patch = graphene.String()
+    content = graphene.String()
+
+    def resolve_content(self, info):
+        lines = Line.get_query(info).filter_by(commit_file_id=self.id).order_by(LineModel.number).all()
+        return '\n'.join([line.content for line in lines])
 
     def resolve_patch(self, info):
         return self.patch

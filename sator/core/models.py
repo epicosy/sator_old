@@ -205,6 +205,38 @@ class CommitFile(db.Model):
     patch = db.Column('patch', db.String, nullable=True)
     raw_url = db.Column('raw_url', db.String, nullable=True)
     commit_id = db.Column(db.String, db.ForeignKey('commit.id'))
+    lines = db.relationship("Line", backref="commit_file")
+
+
+class Line(db.Model):
+    __tablename__ = "line"
+
+    id = db.Column('id', db.String, primary_key=True)
+    number = db.Column('number', db.Integer, nullable=False)
+    content = db.Column('content', db.String, nullable=False)
+    commit_file_id = db.Column(db.String, db.ForeignKey('commit_file.id'))
+
+    @staticmethod
+    def add_all(lines):
+        db.session.add_all(lines)
+        db.session.commit()
+
+
+class Label(db.Model):
+    __tablename__ = "label"
+
+    id = db.Column('id', db.Integer, primary_key=True)
+    name = db.Column('name', db.String, nullable=False)
+
+
+class LineLabel(db.Model):
+    __tablename__ = "line_label"
+    __table_args__ = (
+        db.PrimaryKeyConstraint('line_id', 'label_id'),
+    )
+
+    line_id = db.Column('line_id', db.String, db.ForeignKey('line.id'))
+    label_id = db.Column('label_id', db.Integer, db.ForeignKey('label.id'))
 
 
 class CommitParent(db.Model):

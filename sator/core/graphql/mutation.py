@@ -1,8 +1,10 @@
 import graphene
+
 from graphene import ObjectType
 from graphql import GraphQLError
 from sator.core.graphql.objects import Dataset, DatasetModel, Vulnerability, DatasetVulnerability, VulnerabilityModel,\
-    DatasetVulnerabilityModel
+    DatasetVulnerabilityModel, CommitFile, LineModel, Line
+from sator.utils.misc import get_file_content_from_url, get_digest
 
 
 class CreateDataset(graphene.Mutation):
@@ -147,9 +149,42 @@ class AddDatasetVulnerabilities(graphene.Mutation):
         return AddDatasetVulnerabilities(dataset=dataset)
 
 
+class LoadFile(graphene.Mutation):
+    class Arguments:
+        id = graphene.String(required=True)
+
+    file = graphene.Field(lambda: CommitFile)
+
+    def mutate(self, info, id: str):
+        file = CommitFile.get_query(info).filter_by(id=id).first()
+
+        if not file:
+            raise GraphQLError(f"File with id {id} does not exist")
+
+        try:
+            content = get_file_content_from_url(file.raw_url)
+        except Exception as e:
+            raise GraphQLError(f"Error loading file content from url {file.raw_url}: {e}")
+
+        lines = Line.get_query(info).filter_by(commit_file_id=file.id).all()
+
+        if not lines:
+            line_records = []
+
+            for i, line in enumerate(content.split("\n"), 1):
+                line_id = get_digest(f"{file.id}-{i}")
+                line_records.append(LineModel(id=line_id, number=i, content=line, commit_file_id=file.id))
+
+            LineModel.add_all(line_records)
+
+        return LoadFile(file=file)
+
+
 class Mutation(ObjectType):
     create_dataset = CreateDataset.Field()
     remove_dataset = RemoveDataset.Field()
     remove_dataset_vulnerabilities = RemoveDatasetVulnerabilities.Field()
     add_vulnerabilities_to_dataset = AddDatasetVulnerabilities.Field()
     edit_dataset = EditDataset.Field()
+    load_file = LoadFile.Field()
+

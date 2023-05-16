@@ -169,11 +169,22 @@ class Tag(SQLAlchemyObjectType):
         model = TagModel
         use_connection = True
 
+    name = graphene.String()
+
+    def resolve_name(self, info):
+        return self.name
+
 
 class Reference(SQLAlchemyObjectType):
     class Meta:
         model = ReferenceModel
         use_connection = True
+
+    tags = graphene.List(lambda: Tag)
+
+    def resolve_tags(self, info):
+        tag_ids = ReferenceTag.get_query(info).filter(ReferenceTagModel.reference_id == self.id).all()
+        return Tag.get_query(info).filter(TagModel.id.in_([tag.tag_id for tag in tag_ids])).all()
 
 
 class ReferenceTag(SQLAlchemyObjectType):

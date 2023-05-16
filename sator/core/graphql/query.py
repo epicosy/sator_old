@@ -92,6 +92,7 @@ class Query(ObjectType):
     cwes = graphene.List(lambda: CWE, id=graphene.ID(), exists=graphene.Boolean())
     vulnerabilities = graphene.List(lambda: Vulnerability, id=graphene.ID(), first=graphene.Int(), skip=graphene.Int(),
                                     last=graphene.Int())
+    vulnerability = graphene.Field(lambda: Vulnerability, id=graphene.ID())
     stats = graphene.Field(Stats)
     links = graphene.List(Link)
     assigners = graphene.List(lambda: GrapheneCount, company=graphene.Boolean())
@@ -143,6 +144,9 @@ class Query(ObjectType):
     dataset = graphene.Field(lambda: Dataset, id=graphene.ID())
     search_vulnerability = graphene.List(lambda: Vulnerability, keyword=graphene.String(), limit=graphene.Int())
     datasets_overlap = graphene.Float(src_id=graphene.Int(), tgt_id=graphene.Int())
+
+    def resolve_vulnerability(self, info, id: int):
+        return Vulnerability.get_query(info).filter(VulnerabilityModel.id == id).first()
 
     def resolve_datasets_overlap(self, info, src_id: int, tgt_id: int):
         src_dataset_vulns = DatasetVulnerability.get_query(info).filter(DatasetVulnerabilityModel.dataset_id == src_id).all()

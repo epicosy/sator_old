@@ -72,6 +72,19 @@ class CommitFile(SQLAlchemyObjectType):
         model = CommitFileModel
         use_connection = True
 
+    id = graphene.String()
+    filename = graphene.String()
+    patch = graphene.String()
+
+    def resolve_patch(self, info):
+        return self.patch
+
+    def resolve_id(self, info):
+        return self.id
+
+    def resolve_filename(self, info):
+        return self.filename
+
 
 class ProductType(SQLAlchemyObjectType):
     class Meta:
@@ -142,6 +155,11 @@ class Commit(SQLAlchemyObjectType):
     class Meta:
         model = CommitModel
         use_connection = True
+
+    files = graphene.List(lambda: CommitFile)
+
+    def resolve_files(self, info):
+        return self.files
 
 
 class Repository(SQLAlchemyObjectType):
@@ -250,6 +268,13 @@ class Vulnerability(SQLAlchemyObjectType):
 
     cwe_ids = graphene.List(lambda: CWE)
     references = graphene.List(lambda: Reference)
+    commits = graphene.List(lambda: Commit)
+
+    def resolve_commits(self, info):
+        commits_query = Commit.get_query(info=info)
+        commits_query = commits_query.filter(CommitModel.vulnerability_id == self.id)
+
+        return commits_query.all()
 
     def resolve_references(self, info):
         references_query = Reference.get_query(info=info)

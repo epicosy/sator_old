@@ -144,6 +144,10 @@ class Query(ObjectType):
     dataset = graphene.Field(lambda: Dataset, id=graphene.ID())
     search_vulnerability = graphene.List(lambda: Vulnerability, keyword=graphene.String(), limit=graphene.Int())
     datasets_overlap = graphene.Float(src_id=graphene.Int(), tgt_id=graphene.Int())
+    commit = graphene.Field(lambda: Commit, id=graphene.ID())
+
+    def resolve_commit(self, info, id: int):
+        return Commit.get_query(info).filter(CommitModel.id == id).first()
 
     def resolve_vulnerability(self, info, id: int):
         return Vulnerability.get_query(info).filter(VulnerabilityModel.id == id).first()

@@ -22,6 +22,32 @@ class Base(Controller):
             (['-v', '--version'], {'action': 'version', 'version': VERSION_BANNER}),
         ]
 
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.flask_configs = {}
+
+    def _post_argument_parsing(self):
+        super()._post_argument_parsing()
+
+        if self.app.config.has_section('flask'):
+            self.flask_configs = {k.upper(): v for k, v in self.app.config.get_dict()['flask'].items()}
+
+        if 'RUN_PORT' not in self.flask_configs:
+            self.flask_configs['RUN_PORT'] = 3000
+            self.app.log.warning("No port number specified, setting default port number to '3000'")
+
+        if 'DEBUG' not in self.flask_configs:
+            self.flask_configs['DEBUG'] = self.app.config.get('sator', 'debug')
+
+        flask_app = create_flask_app(configs=self.flask_configs)
+
+        # setup database
+        tables_path = Path(__file__).parent.parent / 'config' / 'tables'
+        from sator.core.models import init_flask_db
+        init_flask_db(tables_path, flask_app, self.app.log)
+
+        self.app.extend('flask_app', flask_app)
+
     def _default(self):
         """Default action if no sub-command is passed."""
 
@@ -37,60 +63,14 @@ class Base(Controller):
     def run(self):
         """Example sub-command."""
 
-        if self.app.config.has_section('flask'):
-            flask_configs = {k.upper(): v for k, v in self.app.config.get_dict()['flask'].items()}
-        else:
-            flask_configs = {}
-
-        if self.app.pargs.port:
-            flask_configs['RUN_PORT'] = self.app.pargs.port
-        elif 'RUN_PORT' not in flask_configs:
-            flask_configs['RUN_PORT'] = 3000
-            self.app.log.warning("No port number specified, setting default port number to '3000'")
-
-        if 'DEBUG' not in flask_configs:
-            flask_configs['DEBUG'] = self.app.config.get('sator', 'debug')
-
-        flask_app = create_flask_app(configs=flask_configs)
-
-        # setup database
-        tables_path = Path(__file__).parent.parent / 'config' / 'tables'
-        from sator.core.models import init_flask_db
-        init_flask_db(tables_path, flask_app, self.app.log)
-
-        flask_app.run(debug=flask_configs['DEBUG'], port=flask_configs['RUN_PORT'], host=self.app.pargs.address)
+        self.app.flask_app.run(debug=self.flask_configs['DEBUG'], port=self.flask_configs['RUN_PORT'],
+                               host=self.app.pargs.address)
 
     @ex(
         help='Gets data from NVD'
     )
     def nvd(self):
-        if self.app.config.has_section('flask'):
-            flask_configs = {k.upper(): v for k, v in self.app.config.get_dict()['flask'].items()}
-        else:
-            flask_configs = {}
-
-        if 'RUN_PORT' not in flask_configs:
-            flask_configs['RUN_PORT'] = 3000
-            self.app.log.warning("No port number specified, setting default port number to '3000'")
-
-        if 'DEBUG' not in flask_configs:
-            flask_configs['DEBUG'] = self.app.config.get('sator', 'debug')
-
-        flask_app = create_flask_app(configs=flask_configs)
-
-        # setup database
-        tables_path = Path(__file__).parent.parent / 'config' / 'tables'
-        from sator.core.models import init_flask_db
-        init_flask_db(tables_path, flask_app, self.app.log)
-
-        self.app.extend('flask_app', flask_app)
-#        # setup database
-#        tables_path = Path(__file__).parent.parent / 'config' / 'tables'
-#        from sator.core.models import init_db
-#        init_db(self.app.config.get('flask', 'SQLALCHEMY_DATABASE_URI'), tables_path, self.app.log)
-
-        nvd_handler = self.app.handler.get('handlers', 'nvd', setup=True)
-        nvd_handler.run()
+        self.app.handler.get('handlers', 'nvd', setup=True).run()
 
     @ex(
         help='Gets data from GitHub',
@@ -101,26 +81,4 @@ class Base(Controller):
     )
     def metadata(self):
         """Example sub-command."""
-
-        if self.app.config.has_section('flask'):
-            flask_configs = {k.upper(): v for k, v in self.app.config.get_dict()['flask'].items()}
-        else:
-            flask_configs = {}
-
-        if 'RUN_PORT' not in flask_configs:
-            flask_configs['RUN_PORT'] = 3000
-            self.app.log.warning("No port number specified, setting default port number to '3000'")
-
-        if 'DEBUG' not in flask_configs:
-            flask_configs['DEBUG'] = self.app.config.get('sator', 'debug')
-
-        flask_app = create_flask_app(configs=flask_configs)
-
-        # setup database
-        tables_path = Path(__file__).parent.parent / 'config' / 'tables'
-        from sator.core.models import init_flask_db
-        init_flask_db(tables_path, flask_app, self.app.log)
-
-        self.app.extend('flask_app', flask_app)
-        nvd_handler = self.app.handler.get('handlers', 'nvd', setup=True)
-        nvd_handler.add_metadata()
+        self.app.handler.get('handlers', 'nvd', setup=True).add_metadata()

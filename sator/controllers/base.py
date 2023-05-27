@@ -61,7 +61,7 @@ class Base(Controller):
         ]
     )
     def run(self):
-        """Example sub-command."""
+        """Run sub-command."""
 
         self.app.flask_app.run(debug=self.flask_configs['DEBUG'], port=self.flask_configs['RUN_PORT'],
                                host=self.app.pargs.address)
@@ -80,5 +80,17 @@ class Base(Controller):
         ]
     )
     def metadata(self):
-        """Example sub-command."""
+        """Metadata sub-command."""
         self.app.handler.get('handlers', 'nvd', setup=True).add_metadata()
+
+    @ex(
+        help='Generates with OpenAI API the software type for each repository in the database',
+        arguments=[
+            (['-gt', '--tokens'], {'help': 'Comma-separated list of tokens for the GitHub API.', 'type': str,
+                                   'required': True}),
+            (['-ot', '--openai-token'], {'help': 'Token for the OpenAI API.', 'type': str, 'required': True}),
+            (['-m', '--model'], {'help': 'Model to use for the OpenAI API.', 'type': str, 'default': 'gpt-3.5-turbo'}),
+        ])
+    def generate(self):
+        """Generate sub-command."""
+        self.app.handler.get('handlers', 'openai', setup=True).generate()

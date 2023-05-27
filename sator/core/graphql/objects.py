@@ -1,6 +1,8 @@
 import graphene
+import sqlalchemy
 
 from graphene_sqlalchemy import SQLAlchemyObjectType
+
 from sator.core.models import CWE as CWEModel, Abstraction as AbstractionModel, Operation as OperationModel, \
     Phase as PhaseModel, BFClass as BFClassModel, CWEOperation as CWEOperationModel, CWEPhase as CWEPhaseModel, \
     CWEBFClass as CWEBFClassModel, Vulnerability as VulnerabilityModel, VulnerabilityCWE as VulnerabilityCWEModel, \
@@ -8,7 +10,19 @@ from sator.core.models import CWE as CWEModel, Abstraction as AbstractionModel, 
     Repository as RepositoryModel, Configuration as ConfigurationModel, Vendor as VendorModel, Product as ProductModel,\
     CommitFile as CommitFileModel, ProductType as ProductTypeModel, RepositoryTopic as RepositoryTopicModel, \
     Topic as TopicModel, ConfigurationVulnerability as ConfigurationVulnerabilityModel, Grouping as GroupingModel, \
-    Dataset as DatasetModel, DatasetVulnerability as DatasetVulnerabilityModel, Line as LineModel
+    Dataset as DatasetModel, DatasetVulnerability as DatasetVulnerabilityModel, Line as LineModel, \
+    RepositoryProductType as RepositoryProductTypeModel
+
+
+class GrapheneCount(graphene.ObjectType):
+    key = graphene.String()
+    value = graphene.Int()
+
+
+class RepositoryProductType(SQLAlchemyObjectType):
+    class Meta:
+        model = RepositoryProductTypeModel
+        use_connection = True
 
 
 class Line(SQLAlchemyObjectType):
@@ -181,6 +195,29 @@ class Repository(SQLAlchemyObjectType):
     commits = graphene.List(lambda: Commit)
     commits_count = graphene.Int()
     topics = graphene.List(graphene.String)
+    software_type = graphene.String()
+    vulnerability_profile = graphene.List(lambda: GrapheneCount)
+    vulnerability_count = graphene.Int()
+
+    def resolve_vulnerability_count(self, info):
+        return len(set([c.vulnerability_id for c in self.commits]))
+
+    def resolve_vulnerability_profile(self, info):
+        vuln_ids = [c.vulnerability_id for c in self.commits if c.vulnerability_id is not None]
+        vulns_query = VulnerabilityCWE.get_query(info).filter(VulnerabilityCWEModel.vulnerability_id.in_(vuln_ids),
+                                                              VulnerabilityCWEModel.vulnerability_id.isnot(None)).\
+            group_by(VulnerabilityCWEModel.cwe_id).\
+            with_entities(VulnerabilityCWEModel.cwe_id, sqlalchemy.func.count(VulnerabilityCWEModel.cwe_id))\
+
+        return [GrapheneCount(key=k, value=v) for k, v in vulns_query.all()]
+
+    def resolve_software_type(self, info):
+        relationships = RepositoryProductType.get_query(info).filter_by(repository_id=self.id).first()
+
+        if relationships:
+            return ProductType.get_query(info).filter_by(id=relationships.product_type_id).first().name
+        else:
+            return None
 
     def resolve_topics(self, info):
         topic_ids = [t.topic_id for t in RepositoryTopic.get_query(info).filter(RepositoryTopicModel.repository_id == self.id).all()]

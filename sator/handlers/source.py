@@ -326,6 +326,7 @@ class SourceHandler(HandlersInterface, Handler):
                                 # TODO: fix this hack
                                 patch = patch.replace("\x00", "\uFFFD")
                             # TODO: add programming language (Guesslang)
+
                             commit_file = CommitFile(filename=f.filename, additions=f.additions, deletions=f.deletions,
                                                      changes=f.changes, status=f.status, raw_url=f.raw_url, id=file_digest,
                                                      extension=Path(f.filename).suffix, commit_id=commit_model.id,

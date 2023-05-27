@@ -7,6 +7,7 @@ from sator.handlers.multi_task import MultiTaskHandler
 from sator.handlers.nvd import NVDHandler
 from sator.core.interfaces import HandlersInterface
 from sator.handlers.github import GithubHandler
+from sator.handlers.openai import OpenAIHandler
 
 
 class Sator(App):
@@ -43,7 +44,7 @@ class Sator(App):
 
         # register handlers
         handlers = [
-            Base, MultiTaskHandler, NVDHandler, GithubHandler
+            Base, MultiTaskHandler, NVDHandler, GithubHandler, OpenAIHandler
         ]
 
     def get_config(self, key: str):

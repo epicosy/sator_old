@@ -13,7 +13,8 @@ from sator.core.graphql.objects import CWE, CWEModel, Vulnerability, Vulnerabili
     VulnerabilityCWEModel, Reference, Commit, ReferenceTagModel, Tag, TagModel, Repository, CommitModel, Configuration, \
     ConfigurationModel, Vendor, Product, RepositoryModel, CommitFile, CommitFileModel, ProductModel, VendorModel, \
     ProductTypeModel, Topic, RepositoryTopicModel, TopicModel, ConfigurationVulnerabilityModel, Grouping, GroupingModel, \
-    Dataset, DatasetModel, DatasetVulnerability, DatasetVulnerabilityModel, BFClassModel, CWEBFClassModel, BFClass
+    Dataset, DatasetModel, DatasetVulnerability, DatasetVulnerabilityModel, RepositoryProductType, ProductType, \
+    RepositoryProductTypeModel, GrapheneCount
 
 
 def extract_company(email: str):
@@ -31,11 +32,6 @@ class Stats(ObjectType):
     labeled = graphene.Int()
     references = graphene.Int()
     commits = graphene.Int()
-
-
-class GrapheneCount(ObjectType):
-    key = graphene.String()
-    value = graphene.Int()
 
 
 class NestedGrapheneCount(ObjectType):
@@ -111,7 +107,6 @@ class Query(ObjectType):
     commits_stats = graphene.List(lambda: GrapheneCount)
     commit_kind_count = graphene.List(lambda: GrapheneCount)
     repositories_commits_frequency = graphene.List(lambda: GrapheneCount)
-    commit = graphene.Field(Commit)
     repositories = graphene.List(Repository)
     repositories_availability = graphene.List(lambda: GrapheneCount)
     commits_availability = graphene.List(lambda: GrapheneCount)
@@ -133,6 +128,7 @@ class Query(ObjectType):
     configs_count_by_product = graphene.List(lambda: GrapheneCount)
     vulns_count_by_product = graphene.List(lambda: GrapheneCount)
     product = graphene.Field(Product, id=graphene.ID())
+    product_types = graphene.List(lambda: ProductType)
     sw_type_count = graphene.List(lambda: GrapheneCount)
     language_extension_links_count = graphene.List(lambda: Link, filter_counts=graphene.Int())
     topics_count = graphene.List(lambda: GrapheneCount)
@@ -145,6 +141,44 @@ class Query(ObjectType):
     search_vulnerability = graphene.List(lambda: Vulnerability, keyword=graphene.String(), limit=graphene.Int())
     datasets_overlap = graphene.Float(src_id=graphene.Int(), tgt_id=graphene.Int())
     commit = graphene.Field(lambda: Commit, id=graphene.ID())
+    repositories_software_type_count = graphene.List(lambda: GrapheneCount)
+    sw_type_vulnerability_profile = graphene.List(lambda: GrapheneCount, sw_type=graphene.String(),
+                                                  repo_id=graphene.String())
+
+    def resolve_product_types(self, info):
+        return ProductType.get_query(info).all()
+
+    def resolve_sw_type_vulnerability_profile(self, info, sw_type: str, repo_id: str = None):
+        sw_type = ProductType.get_query(info).filter(ProductTypeModel.name == sw_type).first()
+
+        if not sw_type:
+            raise GraphQLError(f"Software type {sw_type} not found")
+
+        # TODO: refactor this to be done in the query
+        repos_ids = RepositoryProductType.get_query(info).filter(RepositoryProductTypeModel.product_type_id == sw_type.id).all()
+        to_exclude = None
+
+        if repo_id:
+            repo = Repository.get_query(info).filter(RepositoryModel.id == repo_id).first()
+
+            if repo:
+                to_exclude = repo.id
+
+        repos = Repository.get_query(info).filter(RepositoryModel.id.in_([r.repository_id for r in repos_ids if r.repository_id != to_exclude])).all()
+
+        commits = [c for r in repos for c in r.commits]
+        vulns = [c.vulnerability_id for c in commits]
+        cwes = VulnerabilityCWE.get_query(info).filter(VulnerabilityCWEModel.vulnerability_id.in_(vulns)).\
+            group_by(VulnerabilityCWEModel.cwe_id).\
+            with_entities(VulnerabilityCWEModel.cwe_id, sqlalchemy.func.count(VulnerabilityCWEModel.cwe_id)).all()
+
+        return [GrapheneCount(key=cwe, value=count) for cwe, count in cwes]
+
+    def resolve_repositories_software_type_count(self, info):
+        count = RepositoryProductType.get_query(info).join(ProductTypeModel).group_by(ProductTypeModel.name).\
+            with_entities(ProductTypeModel.name, sqlalchemy.func.count(ProductTypeModel.name)).all()
+
+        return [GrapheneCount(key=k, value=v) for k, v in count]
 
     def resolve_commit(self, info, id: int):
         return Commit.get_query(info).filter(CommitModel.id == id).first()

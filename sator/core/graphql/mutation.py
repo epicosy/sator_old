@@ -2,8 +2,9 @@ import graphene
 
 from graphene import ObjectType
 from graphql import GraphQLError
-from sator.core.graphql.objects import Dataset, DatasetModel, Vulnerability, DatasetVulnerability, VulnerabilityModel,\
-    DatasetVulnerabilityModel, CommitFile, LineModel, Line
+from sator.core.graphql.objects import Dataset, DatasetModel, Vulnerability, DatasetVulnerability, VulnerabilityModel, \
+    DatasetVulnerabilityModel, CommitFile, LineModel, Line, Repository, ProductType, RepositoryProductType, \
+    RepositoryProductTypeModel
 from sator.utils.misc import get_file_content_from_url, get_digest
 
 
@@ -180,6 +181,37 @@ class LoadFile(graphene.Mutation):
         return LoadFile(file=file)
 
 
+class RepositorySoftwareType(graphene.Mutation):
+    class Arguments:
+        id = graphene.String(required=True)
+        software_type_id = graphene.Int(required=True)
+
+    repository = graphene.Field(lambda: Repository)
+
+    def mutate(self, info, id: str, software_type_id: int):
+        repository = Repository.get_query(info).filter_by(id=id).first()
+
+        if not repository:
+            raise GraphQLError(f"Repository with id {id} does not exist")
+
+        software_type = ProductType.get_query(info).filter_by(id=software_type_id).first()
+
+        if not software_type:
+            raise GraphQLError(f"Software type with id {software_type_id} does not exist")
+
+        repository_product_type = RepositoryProductType.get_query(info).filter_by(repository_id=id).first()
+
+        if repository_product_type:
+            repository_product_type.product_type_id = software_type_id
+        else:
+            repository_product_type = RepositoryProductTypeModel(repository_id=id, product_type_id=software_type_id)
+
+        repository_product_type.save()
+        repository.software_type = software_type.name
+
+        return RepositorySoftwareType(repository=repository)
+
+
 class Mutation(ObjectType):
     create_dataset = CreateDataset.Field()
     remove_dataset = RemoveDataset.Field()
@@ -187,4 +219,6 @@ class Mutation(ObjectType):
     add_vulnerabilities_to_dataset = AddDatasetVulnerabilities.Field()
     edit_dataset = EditDataset.Field()
     load_file = LoadFile.Field()
+    repository_software_type = RepositorySoftwareType.Field()
+
 

@@ -260,6 +260,13 @@ class Repository(db.Model):
     language = db.Column('language', db.String, nullable=True)
     commits = db.relationship("Commit", backref="repository")
 
+    def save(self):
+        db.session.add(self)
+        db.session.commit()
+
+    def __repr__(self):
+        return f"<Repository {self.owner}/{self.name}>"
+
 
 class Topic(db.Model):
     __tablename__ = "topic"
@@ -396,6 +403,20 @@ class ProductType(db.Model):
     def populate(tables_path: Path):
         product_types_df = pd.read_csv(f'{tables_path}/product_type.csv')
         db.session.add_all([ProductType(**row.to_dict()) for i, row in product_types_df.iterrows()])
+        db.session.commit()
+
+
+class RepositoryProductType(db.Model):
+    __tablename__ = 'repository_product_type'
+    __table_args__ = (
+        db.PrimaryKeyConstraint('repository_id', 'product_type_id'),
+    )
+
+    repository_id = db.Column('repository_id', db.String, db.ForeignKey('repository.id'))
+    product_type_id = db.Column('product_type_id', db.Integer, db.ForeignKey('product_type.id'))
+
+    def save(self):
+        db.session.add(self)
         db.session.commit()
 
 

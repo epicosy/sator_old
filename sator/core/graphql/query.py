@@ -12,9 +12,11 @@ from sator.core.graphql.objects import CWE, CWEModel, Vulnerability, Vulnerabili
     VulnerabilityCWEModel, Reference, Commit, ReferenceTagModel, Tag, TagModel, Repository, CommitModel, Configuration, \
     ConfigurationModel, Product, RepositoryModel, CommitFile, CommitFileModel, ProductModel, VendorModel, \
     ProductTypeModel, RepositoryTopicModel, TopicModel, ConfigurationVulnerabilityModel, Grouping, GroupingModel, \
-    Dataset, DatasetModel, DatasetVulnerability, DatasetVulnerabilityModel, RepositoryProductType, ProductType, \
+    DatasetVulnerability, DatasetVulnerabilityModel, RepositoryProductType, ProductType, \
     RepositoryProductTypeModel, GrapheneCount
+
 from sator.core.graphql.queries.pagination import PaginationQuery
+from sator.core.graphql.queries.objects import ObjectsQuery
 
 
 def extract_company(email: str):
@@ -44,11 +46,7 @@ class VulnerabilityNode(ObjectType):
     cursor = graphene.String()
 
 
-class Query(PaginationQuery, ObjectType):
-    cwes = graphene.List(lambda: CWE, id=graphene.ID(), exists=graphene.Boolean())
-    vulnerabilities = graphene.List(lambda: Vulnerability, id=graphene.ID(), first=graphene.Int(), skip=graphene.Int(),
-                                    last=graphene.Int())
-    vulnerability = graphene.Field(lambda: Vulnerability, id=graphene.ID())
+class Query(ObjectsQuery, PaginationQuery, ObjectType):
     stats = graphene.Field(Stats)
     links = graphene.List(Link)
     assigners = graphene.List(lambda: GrapheneCount, company=graphene.Boolean())
@@ -58,7 +56,6 @@ class Query(PaginationQuery, ObjectType):
     commits_stats = graphene.List(lambda: GrapheneCount)
     commit_kind_count = graphene.List(lambda: GrapheneCount)
     repositories_commits_frequency = graphene.List(lambda: GrapheneCount)
-    repositories = graphene.List(Repository)
     repositories_availability = graphene.List(lambda: GrapheneCount)
     commits_availability = graphene.List(lambda: GrapheneCount)
     commits_state = graphene.List(lambda: GrapheneCount)
@@ -77,26 +74,17 @@ class Query(PaginationQuery, ObjectType):
     vulns_count_by_vendor = graphene.List(lambda: GrapheneCount)
     configs_count_by_product = graphene.List(lambda: GrapheneCount)
     vulns_count_by_product = graphene.List(lambda: GrapheneCount)
-    product = graphene.Field(Product, id=graphene.ID())
-    product_types = graphene.List(lambda: ProductType)
     sw_type_count = graphene.List(lambda: GrapheneCount)
     language_extension_links_count = graphene.List(lambda: Link, filter_counts=graphene.Int())
     topics_count = graphene.List(lambda: GrapheneCount)
     lang_product_links_count = graphene.List(lambda: Link, filter_counts=graphene.Int())
-    repository = graphene.Field(lambda: Repository, id=graphene.ID())
     cwe_multiplicity = graphene.List(lambda: GrapheneCount)
     vulns_count_by_sof_dev_view = graphene.List(lambda: GrapheneCount)
-    datasets = graphene.List(lambda: Dataset)
-    dataset = graphene.Field(lambda: Dataset, id=graphene.ID())
     search_vulnerability = graphene.List(lambda: Vulnerability, keyword=graphene.String(), limit=graphene.Int())
     datasets_overlap = graphene.Float(src_id=graphene.Int(), tgt_id=graphene.Int())
-    commit = graphene.Field(lambda: Commit, id=graphene.ID())
     repositories_software_type_count = graphene.List(lambda: GrapheneCount)
     sw_type_vulnerability_profile = graphene.List(lambda: GrapheneCount, sw_type=graphene.String(),
                                                   repo_id=graphene.String())
-
-    def resolve_product_types(self, info):
-        return ProductType.get_query(info).all()
 
     def resolve_sw_type_vulnerability_profile(self, info, sw_type: str, repo_id: str = None):
         sw_type = ProductType.get_query(info).filter(ProductTypeModel.name == sw_type).first()
@@ -130,12 +118,6 @@ class Query(PaginationQuery, ObjectType):
 
         return [GrapheneCount(key=k, value=v) for k, v in count]
 
-    def resolve_commit(self, info, id: int):
-        return Commit.get_query(info).filter(CommitModel.id == id).first()
-
-    def resolve_vulnerability(self, info, id: int):
-        return Vulnerability.get_query(info).filter(VulnerabilityModel.id == id).first()
-
     def resolve_datasets_overlap(self, info, src_id: int, tgt_id: int):
         src_dataset_vulns = DatasetVulnerability.get_query(info).filter(DatasetVulnerabilityModel.dataset_id == src_id).all()
         tgt_dataset_vulns = DatasetVulnerability.get_query(info).filter(DatasetVulnerabilityModel.dataset_id == tgt_id).all()
@@ -154,12 +136,6 @@ class Query(PaginationQuery, ObjectType):
     def resolve_search_vulnerability(self, info, keyword: str, limit: int = 10):
         return Vulnerability.get_query(info).filter(VulnerabilityModel.id.ilike(f'%{keyword}%'))\
             .limit(limit).all()
-
-    def resolve_dataset(self, info, id):
-        return Dataset.get_query(info).filter(DatasetModel.id == id).first()
-
-    def resolve_datasets(self, info):
-        return Dataset.get_query(info).all()
 
     def resolve_vulns_count_by_sof_dev_view(self, info):
         sof_dev_categories = Grouping.get_query(info).filter(GroupingModel.parent_id == 699).all()
@@ -197,11 +173,6 @@ class Query(PaginationQuery, ObjectType):
 
         return [GrapheneCount(key=k, value=v) for k, v in count_of_counts]
 
-    def resolve_repository(self, info, id):
-        return Repository.get_query(info).filter(RepositoryModel.id == id).join(CommitModel).first()
-
-    def resolve_product(self, info, id):
-        return Product.get_query(info).filter(ProductModel.id == id).first()
 
     def resolve_sw_type_count(self, info):
         query = Product.get_query(info).join(ProductTypeModel)
@@ -314,12 +285,6 @@ class Query(PaginationQuery, ObjectType):
             with_entities(CommitFileModel.status, sqlalchemy.func.count(CommitFileModel.status)).all()
 
         return [GrapheneCount(key=k, value=v) for k, v in query]
-
-    def resolve_repositories(self, info):
-        return Repository.get_query(info).all()
-
-    def resolve_commit(self, info, id):
-        return Commit.get_query(info).filter(CommitModel.id == id).first()
 
     def resolve_vulns_by_year(self, info):
         year_exp = sqlalchemy.extraccwet('year', VulnerabilityModel.published_date)
@@ -508,33 +473,3 @@ class Query(PaginationQuery, ObjectType):
         commits = Commit.get_query(info).count()
 
         return Stats(total, labeled, references, commits)
-
-    def resolve_cwes(self, info, id=None, exists: bool = False):
-        query = CWE.get_query(info)
-
-        if id:
-            query = query.filter(CWEModel.id == id)
-
-        if exists:
-            # return CWEs that have vulnerabilities associated
-            query = query.join(VulnerabilityCWEModel)
-
-        return query.order_by('id').all()
-
-    def resolve_vulnerabilities(self, info, id=None, first: int = None, skip: int = None, last: int = None, **kwargs):
-        query = Vulnerability.get_query(info).order_by(VulnerabilityModel.published_date.desc())
-
-        if id:
-            return query.filter(VulnerabilityModel.id == id)
-        query = query.all()
-
-        if skip:
-            query = query[skip:]
-
-        if first:
-            query = query[:first]
-
-        elif last:
-            query = query[:last]
-
-        return query

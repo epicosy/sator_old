@@ -19,6 +19,10 @@ from sator.core.models import Tag, CWE, Vulnerability, Reference, Repository, Co
     CommitFile, db, CommitParent, Topic, RepositoryTopic, ConfigurationVulnerability
 from sator.handlers.github import GithubHandler
 from sator.handlers.multi_task import MultiTaskHandler
+from github.Repository import Repository as GithubRepository
+from github.Commit import Commit as GithubCommit
+from github.File import File as GithubFile
+from github.GitCommit import GitCommit
 
 # captures pull requests and diffs
 HOST_OWNER_REPO_REGEX = '(?P<host>(git@|https:\/\/)([\w\.@]+)(\/|:))(?P<owner>[\w,\-,\_]+)\/(?P<repo>[\w,\-,\_]+)(.git){0,1}((\/){0,1})'
@@ -235,6 +239,142 @@ class SourceHandler(HandlersInterface, Handler):
 
         return True
 
+    def update_unavailable_repository(self, repo_model: Repository):
+        repo_model.available = False
+
+        for commit_model in repo_model.commits:
+            commit_model.available = False
+
+        db.session.commit()
+
+    def update_awaiting_repository(self, repo: GithubRepository, repo_model: Repository):
+        repo_model.available = True
+        repo_model.language = repo.language
+        repo_model.description = repo.description
+
+        for topic in repo.topics:
+            topic_digest = self.get_digest(topic)
+
+            if not self.has_id(topic_digest, 'topics'):
+                self.add_id(topic_digest, 'topics')
+                db.session.add(Topic(id=topic_digest, name=topic))
+                db.session.commit()
+
+            db.session.add(RepositoryTopic(topic_id=topic_digest, repository_id=repo_model.id))
+
+        db.session.commit()
+
+    def update_awaiting_commit(self, repo: GithubRepository, commit_model: Commit) -> Union[GithubCommit, None]:
+        commit = self.github_handler.get_commit(repo, commit_sha=commit_model.sha)
+
+        # add flag for available commits
+        if not commit:
+            commit_model.available = False
+            db.session.commit()
+            return None
+
+        commit_model.author = commit.commit.author.name.strip()
+        commit_model.message = commit.commit.message.strip()
+        commit_model.changes = commit.stats.total
+        commit_model.additions = commit.stats.additions
+        commit_model.deletions = commit.stats.deletions
+        commit_model.date = commit.commit.author.date
+        commit_model.state = commit.get_combined_status().state
+
+        if len(commit_model.sha) != 40 and commit_model.sha != commit.sha:
+            commit_model.sha = commit.sha
+            commit_model.url = commit.html_url
+
+        commit_model.available = True
+        db.session.commit()
+
+        return commit
+
+    def update_commit_file(self, commit_id: str, commit_sha: str, file: GithubFile) -> str:
+        file_digest = self.get_digest(f"{commit_sha}/{file.filename}")
+        patch = None
+
+        if not self.has_id(file_digest, 'files'):
+            if file.patch:
+                patch = file.patch.strip()
+                # TODO: fix this hack
+                patch = patch.replace("\x00", "\uFFFD")
+            # TODO: add programming language (Guesslang)
+
+            commit_file = CommitFile(filename=file.filename, additions=file.additions, deletions=file.deletions,
+                                     changes=file.changes, status=file.status, raw_url=file.raw_url, id=file_digest,
+                                     extension=Path(file.filename).suffix, commit_id=commit_id, patch=patch)
+
+            db.session.add(commit_file)
+            db.session.commit()
+            self.add_id(file_digest, 'files')
+
+        return file_digest
+
+    def update_commit_files(self, repo: GithubRepository, commit_model: Commit, commit: GithubCommit) -> bool:
+        commit_files = [cf.id for cf in CommitFile.query.filter_by(commit_id=commit_model.id).all()]
+
+        if (commit_model.files_count is None) or (len(commit_files) != commit_model.files_count):
+
+            if commit is None:
+                commit = self.github_handler.get_commit(repo, commit_sha=commit_model.sha, raise_err=True)
+
+            for f in commit.files:
+                self.update_commit_file(commit_model.id, commit_model.sha, f)
+
+            commit_model.files_count = len(commit.files)
+            db.session.commit()
+
+            return True
+
+        return False
+
+    def update_parent_commit(self, repo_model: Repository, commit_model: Commit, parent: GitCommit) -> str:
+        parent_digest = self.get_digest(parent.url)
+
+        if not self.has_id(parent_digest, 'commits'):
+            db.session.add(Commit(id=parent_digest, kind='parent', url=parent.url,
+                                  repository_id=repo_model.id, sha=parent.sha,
+                                  vulnerability_id=commit_model.vulnerability_id))
+            db.session.commit()
+            self.add_id(parent_digest, 'commits')
+
+        return parent_digest
+
+    def update_parent_commits(self, repo: GithubRepository, commit: GithubCommit, commit_model: Commit) -> bool:
+        parent_commits = [cp.parent_id for cp in CommitParent.query.filter_by(commit_id=commit_model.id).all()]
+
+        if (commit_model.parents_count is None) or (len(parent_commits) != commit_model.parents_count):
+
+            if commit is None:
+                commit = self.github_handler.get_commit(repo, commit_sha=commit_model.sha)
+
+            for parent in commit.commit.parents:
+                parent_digest = self.update_parent_commit(repo, commit_model, parent)
+
+                if parent_digest not in parent_commits:
+                    db.session.add(CommitParent(commit_id=commit_model.id, parent_id=parent_digest))
+                    db.session.commit()
+
+            commit_model.parents_count = len(commit.commit.parents)
+            db.session.commit()
+
+            return True
+
+        return False
+
+    def update_commit(self, repo: GithubRepository, commit_model: Commit):
+        commit = None
+
+        if commit_model.available is None:
+            commit = self.update_awaiting_commit(repo, commit_model)
+
+        if commit_model.available:
+            self.update_commit_files(repo, commit_model, commit)
+
+            if commit_model.kind != 'parent':
+                self.update_parent_commits(repo, commit, commit_model)
+
     def add_metadata(self):
 
         with self.app.flask_app.app_context():
@@ -252,116 +392,11 @@ class SourceHandler(HandlersInterface, Handler):
                 repo = self.github_handler.get_repo(repo_model.owner, project=repo_model.name)
 
                 if not repo:
-                    repo_model.available = False
-
-                    for commit_model in repo_model.commits:
-                        commit_model.available = False
-
-                    db.session.commit()
+                    self.update_unavailable_repository(repo_model)
                     continue
 
                 if repo_model.available is None:
-                    repo_model.available = True
-                    repo_model.language = repo.language
-                    repo_model.description = repo.description
-
-                    for topic in repo.topics:
-                        topic_digest = self.get_digest(topic)
-
-                        if not self.has_id(topic_digest, 'topics'):
-                            self.add_id(topic_digest, 'topics')
-                            db.session.add(Topic(id=topic_digest, name=topic))
-                            db.session.commit()
-
-                        db.session.add(RepositoryTopic(topic_id=topic_digest, repository_id=repo_model.id))
-
-                    db.session.commit()
+                    self.update_awaiting_repository(repo, repo_model)
 
                 for commit_model in tqdm(repo_model.commits):
-                    if commit_model.available is False:
-                        continue
-
-                    commit = None
-
-                    if commit_model.available is None:
-                        # add flag for available commits
-                        commit = self.github_handler.get_commit(repo, commit_sha=commit_model.sha)
-
-                        if not commit:
-                            commit_model.available = False
-                            db.session.commit()
-                            continue
-
-                        commit_model.author = commit.commit.author.name.strip()
-                        commit_model.message = commit.commit.message.strip()
-                        commit_model.changes = commit.stats.total
-                        commit_model.additions = commit.stats.additions
-                        commit_model.deletions = commit.stats.deletions
-                        commit_model.date = commit.commit.author.date
-                        commit_model.state = commit.get_combined_status().state
-
-                        if len(commit_model.sha) != 40 and commit_model.sha != commit.sha:
-                            commit_model.sha = commit.sha
-                            commit_model.url = commit.html_url
-
-                        commit_model.available = True
-                        db.session.commit()
-
-                    commit_files = [cf.id for cf in CommitFile.query.filter_by(commit_id=commit_model.id).all()]
-
-                    if (commit_model.files_count is None) or (len(commit_files) != commit_model.files_count):
-
-                        if commit is None:
-                            commit = self.github_handler.get_commit(repo, commit_sha=commit_model.sha, raise_err=True)
-
-                        for f in commit.files:
-                            file_digest = self.get_digest(f"{commit_model.sha}/{f.filename}")
-                            patch = None
-
-                            if self.has_id(file_digest, 'files'):
-                                continue
-
-                            if f.patch:
-                                patch = f.patch.strip()
-                                # TODO: fix this hack
-                                patch = patch.replace("\x00", "\uFFFD")
-                            # TODO: add programming language (Guesslang)
-
-                            commit_file = CommitFile(filename=f.filename, additions=f.additions, deletions=f.deletions,
-                                                     changes=f.changes, status=f.status, raw_url=f.raw_url, id=file_digest,
-                                                     extension=Path(f.filename).suffix, commit_id=commit_model.id,
-                                                     patch=patch)
-
-                            db.session.add(commit_file)
-                            db.session.commit()
-                            self.add_id(file_digest, 'files')
-
-                        commit_model.files_count = len(commit.files)
-                        db.session.commit()
-
-                    if commit_model.kind == 'parent':
-                        continue
-
-                    parent_commits = [cp.parent_id for cp in CommitParent.query.filter_by(commit_id=commit_model.id).all()]
-
-                    if (commit_model.parents_count is None) or (len(parent_commits) != commit_model.parents_count):
-
-                        if commit is None:
-                            commit = self.github_handler.get_commit(repo, commit_sha=commit_model.sha)
-
-                        for parent in commit.commit.parents:
-                            parent_digest = self.get_digest(parent.url)
-
-                            if parent_digest not in parent_commits:
-                                if not self.has_id(parent_digest, 'commits'):
-                                    db.session.add(Commit(id=parent_digest, kind='parent', url=parent.url,
-                                                          repository_id=repo_model.id, sha=parent.sha,
-                                                          vulnerability_id=commit_model.vulnerability_id))
-                                    db.session.commit()
-                                    self.add_id(parent_digest, 'commits')
-
-                                db.session.add(CommitParent(commit_id=commit_model.id, parent_id=parent_digest))
-                                db.session.commit()
-
-                        commit_model.parents_count = len(commit.commit.parents)
-                        db.session.commit()
+                    self.update_commit(repo, commit_model)

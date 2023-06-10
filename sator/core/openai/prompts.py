@@ -1,6 +1,6 @@
 from typing import Union, List, Dict
 
-from sator.core.openai.utils import remove_links, remove_html_tags
+from sator.core.openai.utils import remove_links, remove_html_tags, remove_code_blocks
 
 REQUEST_TOKENS_LIMIT = 2000
 GET_REPOSITORY_SOFTWARE_TYPE = [{"role": "system",
@@ -37,6 +37,8 @@ def get_repository_software_type(name: str, description: str, read_me: str, marg
     content = f"Name: {name}\nDescription: {description}"
     allowed_size = REQUEST_TOKENS_LIMIT - prompt_size - max_completion_size - len(content) - margin
 
+    # Remove code blocks from read me
+    read_me = remove_code_blocks(read_me)
     # Remove HTML elements from read me
     read_me = remove_html_tags(read_me)
     # Remove URLs from the read me
@@ -49,7 +51,6 @@ def get_repository_software_type(name: str, description: str, read_me: str, marg
         read_me = read_me[:allowed_size]
 
     content += f"\nRead me: {read_me}"
-    print(len(content))
     messages.append({"role": "user", "content": content})
 
     if not prompt:

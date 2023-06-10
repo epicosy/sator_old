@@ -1,6 +1,6 @@
 import requests
 import hashlib
-
+import re
 
 def get_file_content_from_url(url: str):
     request = requests.get(url)
@@ -13,3 +13,7 @@ def get_file_content_from_url(url: str):
 
 def get_digest(string: str):
     return hashlib.md5(string.encode('utf-8')).hexdigest()
+
+
+def extract_company(email: str):
+    return re.findall(r"\@(.*?)\.", email)[0]

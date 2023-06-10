@@ -19,6 +19,46 @@ class Pagination(ObjectType):
     perPage = graphene.Int()
     pages = graphene.List(graphene.Int)
 
+    @classmethod
+    def get_paginated(cls, query, page: int = 1, per_page: int = 10, left_edge: int = 4, right_edge: int = 4,
+                      left_current: int = 5, right_current: int = 5):
+        """
+        Get a paginated response for a GraphQL query.
+
+        Args:
+            query: The query object to paginate.
+            page (int, optional): The current page number.
+            per_page (int, optional): The number of items per page.
+            left_edge (int, optional): The number of pages displayed at the left edge.
+            right_edge (int, optional): The number of pages displayed at the right edge.
+            left_current (int, optional): The number of pages displayed to the left of the current page.
+            right_current (int, optional): The number of pages displayed to the right of the current page.
+
+        Returns:
+            A paginated response object with the following fields:
+            - hasNextPage: True if there is a next page, False otherwise.
+            - hasPreviousPage: True if there is a previous page, False otherwise.
+            - totalPages: The total number of pages.
+            - totalResults: The total number of results.
+            - page: The current page number.
+            - perPage: The number of items per page.
+            - pages: A list of page numbers.
+            - elements: A list of paginated items.
+
+        """
+
+        paginated = query.paginate(page=page, per_page=per_page)
+        pages = list(paginated.iter_pages(left_edge=left_edge, right_edge=right_edge, left_current=left_current,
+                                          right_current=right_current))
+        items = [item for item in paginated.items]
+
+        # TODO: check if this is needed
+        # startCursor=edges[0].cursor if edges else None,
+        # endCursor=edges[-1].cursor if edges else None,
+        return cls(hasNextPage=paginated.has_next, hasPreviousPage=paginated.has_prev,
+                   totalPages=paginated.pages, totalResults=paginated.total, page=paginated.page,
+                   perPage=paginated.per_page, pages=pages, elements=items)
+
 
 class VulnerabilitiesPage(Pagination):
     elements = graphene.List(Vulnerability)
@@ -73,39 +113,12 @@ class PaginationQuery(ObjectType):
         if severity:
             query = query.filter(VulnerabilityModel.severity.in_(severity))
 
-        vulnerabilities_pagination = query.paginate(page=page, per_page=per_page)
-
-        vulnerabilities_page = VulnerabilitiesPage(
-            hasNextPage=vulnerabilities_pagination.has_next,
-            hasPreviousPage=vulnerabilities_pagination.has_prev,
-            # startCursor=edges[0].cursor if edges else None,
-            # endCursor=edges[-1].cursor if edges else None,
-            totalPages=vulnerabilities_pagination.pages,
-            totalResults=vulnerabilities_pagination.total,
-            page=vulnerabilities_pagination.page,
-            perPage=vulnerabilities_pagination.per_page,
-            pages=list(
-                vulnerabilities_pagination.iter_pages(left_edge=4, right_edge=4, left_current=5, right_current=5)),
-            elements=[vulnerability for vulnerability in vulnerabilities_pagination.items]
-        )
-
-        return vulnerabilities_page
+        return VulnerabilitiesPage.get_paginated(query, page=page, per_page=per_page)
 
     def resolve_commits_page(self, info, page=1, per_page=10):
         query = Commit.get_query(info)
-        commits_pagination = query.paginate(page=page, per_page=per_page)
-        commits_page = CommitsPage(
-            hasNextPage=commits_pagination.has_next,
-            hasPreviousPage=commits_pagination.has_prev,
-            totalPages=commits_pagination.pages,
-            totalResults=commits_pagination.total,
-            page=commits_pagination.page,
-            perPage=commits_pagination.per_page,
-            pages=list(commits_pagination.iter_pages(left_edge=4, right_edge=4, left_current=5, right_current=5)),
-            elements=[commit for commit in commits_pagination.items]
-        )
 
-        return commits_page
+        return CommitsPage.get_paginated(query, page=page, per_page=per_page)
 
     def resolve_repositories_page(self, info, page=1, per_page=10, availability: List[bool] = None,
                                   language: List[str] = None):
@@ -117,81 +130,24 @@ class PaginationQuery(ObjectType):
         if language:
             query = query.filter(RepositoryModel.language.in_(language))
 
-        repositories_pagination = query.paginate(page=page, per_page=per_page)
-        repositories_page = RepositoriesPage(
-            hasNextPage=repositories_pagination.has_next,
-            hasPreviousPage=repositories_pagination.has_prev,
-            totalPages=repositories_pagination.pages,
-            totalResults=repositories_pagination.total,
-            page=repositories_pagination.page,
-            perPage=repositories_pagination.per_page,
-            pages=list(repositories_pagination.iter_pages(left_edge=4, right_edge=4, left_current=5, right_current=5)),
-            elements=[repository for repository in repositories_pagination.items]
-        )
-
-        return repositories_page
+        return RepositoriesPage.get_paginated(query, page=page, per_page=per_page)
 
     def resolve_configurations_page(self, info, page=1, per_page=10):
         query = Configuration.get_query(info)
-        configurations_pagination = query.paginate(page=page, per_page=per_page)
-        configurations_page = ConfigurationsPage(
-            hasNextPage=configurations_pagination.has_next,
-            hasPreviousPage=configurations_pagination.has_prev,
-            totalPages=configurations_pagination.pages,
-            totalResults=configurations_pagination.total,
-            page=configurations_pagination.page,
-            perPage=configurations_pagination.per_page,
-            pages=list(
-                configurations_pagination.iter_pages(left_edge=4, right_edge=4, left_current=5, right_current=5)),
-            elements=[configuration for configuration in configurations_pagination.items]
-        )
 
-        return configurations_page
+        return ConfigurationsPage.get_paginated(query, page=page, per_page=per_page)
 
     def resolve_vendors_page(self, info, page=1, per_page=10):
         query = Vendor.get_query(info)
-        vendors_pagination = query.paginate(page=page, per_page=per_page)
-        vendors_page = VendorsPage(
-            hasNextPage=vendors_pagination.has_next,
-            hasPreviousPage=vendors_pagination.has_prev,
-            totalPages=vendors_pagination.pages,
-            totalResults=vendors_pagination.total,
-            page=vendors_pagination.page,
-            perPage=vendors_pagination.per_page,
-            pages=list(vendors_pagination.iter_pages(left_edge=4, right_edge=4, left_current=5, right_current=5)),
-            elements=[vendor for vendor in vendors_pagination.items]
-        )
 
-        return vendors_page
+        return VendorsPage.get_paginated(query, page=page, per_page=per_page)
 
     def resolve_products_page(self, info, page=1, per_page=10):
         query = Product.get_query(info)
-        products_pagination = query.paginate(page=page, per_page=per_page)
-        products_page = ProductsPage(
-            hasNextPage=products_pagination.has_next,
-            hasPreviousPage=products_pagination.has_prev,
-            totalPages=products_pagination.pages,
-            totalResults=products_pagination.total,
-            page=products_pagination.page,
-            perPage=products_pagination.per_page,
-            pages=list(products_pagination.iter_pages(left_edge=4, right_edge=4, left_current=5, right_current=5)),
-            elements=[product for product in products_pagination.items]
-        )
 
-        return products_page
+        return ProductsPage.get_paginated(query, page=page, per_page=per_page)
 
     def resolve_commit_files_page(self, info, page=1, per_page=10):
         query = CommitFile.get_query(info)
-        commit_files_pagination = query.paginate(page=page, per_page=per_page)
-        commit_files_page = CommitFilesPage(
-            hasNextPage=commit_files_pagination.has_next,
-            hasPreviousPage=commit_files_pagination.has_prev,
-            totalPages=commit_files_pagination.pages,
-            totalResults=commit_files_pagination.total,
-            page=commit_files_pagination.page,
-            perPage=commit_files_pagination.per_page,
-            pages=list(commit_files_pagination.iter_pages(left_edge=4, right_edge=4, left_current=5, right_current=5)),
-            elements=[commit_file for commit_file in commit_files_pagination.items]
-        )
 
-        return commit_files_page
+        return CommitFilesPage.get_paginated(query, page=page, per_page=per_page)

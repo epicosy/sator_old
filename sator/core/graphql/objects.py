@@ -11,7 +11,7 @@ from sator.core.models import CWE as CWEModel, Abstraction as AbstractionModel, 
     CommitFile as CommitFileModel, ProductType as ProductTypeModel, RepositoryTopic as RepositoryTopicModel, \
     Topic as TopicModel, ConfigurationVulnerability as ConfigurationVulnerabilityModel, Grouping as GroupingModel, \
     Dataset as DatasetModel, DatasetVulnerability as DatasetVulnerabilityModel, Line as LineModel, \
-    RepositoryProductType as RepositoryProductTypeModel
+    RepositoryProductType as RepositoryProductTypeModel, Function as FunctionModel
 
 
 class GrapheneCount(graphene.ObjectType):
@@ -28,6 +28,12 @@ class RepositoryProductType(SQLAlchemyObjectType):
 class Line(SQLAlchemyObjectType):
     class Meta:
         model = LineModel
+        use_connection = True
+
+
+class Function(SQLAlchemyObjectType):
+    class Meta:
+        model = FunctionModel
         use_connection = True
 
 

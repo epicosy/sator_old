@@ -376,7 +376,6 @@ class SourceHandler(HandlersInterface, Handler):
                 self.update_parent_commits(repo, commit, commit_model)
 
     def add_metadata(self):
-
         with self.app.flask_app.app_context():
             self.init_global_context()
 

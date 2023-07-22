@@ -153,7 +153,7 @@ class CountsQuery(ObjectType):
         return [GrapheneCount(key=cwe, value=count) for cwe, count in cwes]
 
     def resolve_vulns_by_year(self, info):
-        year_exp = sqlalchemy.extraccwet('year', VulnerabilityModel.published_date)
+        year_exp = sqlalchemy.func.extract('year', VulnerabilityModel.published_date)
         count_exp = sqlalchemy.func.count(VulnerabilityModel.published_date)
         vulns_by_year = Vulnerability.get_query(info).with_entities(year_exp, count_exp).group_by(year_exp).order_by(
             year_exp).all()

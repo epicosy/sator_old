@@ -239,6 +239,24 @@ class LineLabel(db.Model):
     label_id = db.Column('label_id', db.Integer, db.ForeignKey('label.id'))
 
 
+class Function(db.Model):
+    __tablename__ = "function"
+
+    id = db.Column('id', db.String, primary_key=True)
+    name = db.Column('name', db.String, nullable=False)
+    commit_file_id = db.Column(db.String, db.ForeignKey('commit_file.id'))
+    start_line = db.Column('start_line', db.Integer, nullable=False)
+    start_col = db.Column('start_col', db.Integer, nullable=False)
+    end_line = db.Column('end_line', db.Integer, nullable=False)
+    end_col = db.Column('end_col', db.Integer, nullable=False)
+    size = db.Column('size', db.Integer, nullable=False)
+
+    @staticmethod
+    def add_all(functions):
+        db.session.add_all(functions)
+        db.session.commit()
+
+
 class CommitParent(db.Model):
     __tablename__ = "commit_parent"
     __table_args__ = (

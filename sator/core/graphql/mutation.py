@@ -4,8 +4,8 @@ from graphene import ObjectType
 from graphql import GraphQLError
 from sator.core.graphql.objects import Dataset, DatasetModel, Vulnerability, DatasetVulnerability, VulnerabilityModel, \
     DatasetVulnerabilityModel, CommitFile, LineModel, Line, Repository, ProductType, RepositoryProductType, \
-    RepositoryProductTypeModel
-from sator.utils.misc import get_file_content_from_url, get_digest
+    RepositoryProductTypeModel, Function, FunctionModel
+from sator.utils.misc import get_file_content_from_url, get_digest, JavaMethodExtractor
 
 
 class CreateDataset(graphene.Mutation):
@@ -179,6 +179,47 @@ class LoadFile(graphene.Mutation):
             LineModel.add_all(line_records)
 
         return LoadFile(file=file)
+
+
+class ExtractFunctions(graphene.Mutation):
+    class Arguments:
+        id = graphene.String(required=True)
+
+    file = graphene.Field(lambda: CommitFile)
+
+    def mutate(self, info, id: str):
+        file = CommitFile.get_query(info).filter_by(id=id).first()
+
+        if not file:
+            raise GraphQLError(f"File with id {id} does not exist")
+
+        if file.extension != ".java":
+            raise GraphQLError(f"File with id {id} is not within available languages: [Java]")
+
+        functions = Function.get_query(info).filter_by(commit_file_id=file.id).order_by(FunctionModel.start).all()
+
+        if not functions:
+
+            lines = Line.get_query(info).filter_by(commit_file_id=file.id).all()
+
+            if not lines:
+                raise GraphQLError(f"File with id {id} has not been previously loaded")
+
+            try:
+                jve = JavaMethodExtractor(code_lines=[l.content for l in lines])
+            except Exception as e:
+                raise GraphQLError(f"Failed to extract methods: {str(e)}")
+
+            for method in jve.methods:
+                functions.append(FunctionModel(id=get_digest(f"{file.id}-{method.name}-{method.start_line}"),
+                                               name=method.name, start_line=method.start_line, start_col=method.start_col,
+                                               end_line=method.end_line, end_col=method.end_col, commit_file_id=file.id,
+                                               size=len(method))
+                                 )
+
+            FunctionModel.add_all(functions)
+
+        return ExtractFunctions(file=file)
 
 
 class RepositorySoftwareType(graphene.Mutation):

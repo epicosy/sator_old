@@ -4,15 +4,18 @@ import graphene
 import sqlalchemy
 
 from graphene import ObjectType
+from graphql import GraphQLError
 # from graphql_relay import to_global_id
 
 from sator.core.graphql.objects import CWE, Vulnerability, VulnerabilityModel, VulnerabilityCWE, CommitFileModel, \
     VulnerabilityCWEModel, Reference, Commit, Repository, CommitModel, ConfigurationModel, RepositoryModel, \
-    ProductModel, ProductTypeModel, DatasetVulnerability, DatasetVulnerabilityModel
+    ProductModel, ProductTypeModel, DatasetVulnerability, DatasetVulnerabilityModel, Line, LineModel, Function,\
+    FunctionModel
 
 from sator.core.graphql.queries.pagination import PaginationQuery
 from sator.core.graphql.queries.objects import ObjectsQuery
 from sator.core.graphql.queries.counts import CountsQuery
+from sator.utils.misc import JavaMethodExtractor
 
 
 class Link(ObjectType):
@@ -33,6 +36,18 @@ class VulnerabilityNode(ObjectType):
     cursor = graphene.String()
 
 
+class Position(ObjectType):
+    line = graphene.Int()
+    column = graphene.Int()
+
+
+class MethodBoundary(ObjectType):
+    name = graphene.String()
+    start = graphene.Field(lambda: Position)
+    end = graphene.Field(lambda: Position)
+    code = graphene.List(graphene.String)
+
+
 class Query(CountsQuery, ObjectsQuery, PaginationQuery, ObjectType):
     stats = graphene.Field(Stats)
     links = graphene.List(Link)
@@ -42,6 +57,10 @@ class Query(CountsQuery, ObjectsQuery, PaginationQuery, ObjectType):
 
     search_vulnerability = graphene.List(lambda: Vulnerability, keyword=graphene.String(), limit=graphene.Int())
     datasets_overlap = graphene.Float(src_id=graphene.Int(), tgt_id=graphene.Int())
+    functions = graphene.List(lambda: MethodBoundary, file_id=graphene.String())
+
+    def resolve_functions(self, info, file_id: str):
+        return Function.get_query(info).filter_by(commit_file_id=file_id).order_by(FunctionModel.start).all()
 
     def resolve_datasets_overlap(self, info, src_id: int, tgt_id: int):
         src_dataset_vulns = DatasetVulnerability.get_query(info).filter(DatasetVulnerabilityModel.dataset_id == src_id).all()

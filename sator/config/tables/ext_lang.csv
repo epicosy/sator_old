@@ -1,0 +1,68 @@
+extension,language
+m,Objective-C
+mm,Objective-C
+java,Java
+jsp,Java
+jspf,Java
+scala,Scala
+c,C
+    C/C++:
+      
+      - "cc"
+      - "cxx"
+      - "cpp"
+      - "hpp"
+      - "c++"
+      - "h"
+      - "hh"
+      - "cppm"
+      - "ixx"
+      - "cp"
+      - "inl"
+    Groovy:
+      - "groovy"
+    PHP:
+      - "php"
+      - "tpl"
+      - "inc"
+      - "ctp"
+      - "phpt"
+      - "phtml"
+    JavaScript:
+      - "js"
+      - "jsx"
+      - "coffee"
+    Python:
+      - "py"
+    Config files:
+      - "lock"
+      - "gradle"
+      - "json"
+      - "config"
+      - "yaml"
+      - "conf"
+    Ruby:
+      - "rb"
+    HTML:
+      - "html"
+      - "erb"
+    Perl:
+      - "pm"
+    Go:
+      - "go"
+    Lua:
+      - "lua"
+    Erlang:
+      - "erl"
+    C#:
+      - "cs"
+    Rust:
+      - "rust"
+    Vala:
+      - "vala"
+    SQL:
+      - "sql"
+    XML:
+      - "xml"
+    Shell:
+      - "sh"

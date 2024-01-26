@@ -8,4 +8,7 @@ RUN pip install .
 RUN ./setup.sh
 #RUN sator nvd
 
-ENTRYPOINT sator run -u "$SQLALCHEMY_DATABASE_URI" -p "$RUN_PORT"
+ARG SQLALCHEMY_DATABASE_URI
+ARG PORT
+
+ENTRYPOINT sator run -u "$SQLALCHEMY_DATABASE_URI" -p "$PORT"

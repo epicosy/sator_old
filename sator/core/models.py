@@ -557,8 +557,8 @@ def init_flask_db(tables_path, flask_app, logger, uri: str = None):
         logger.info(f"Using the default database URI from the configuration file.")
         uri = flask_app.config.get('SQLALCHEMY_DATABASE_URI', None)
 
-    if not uri:
-        raise SatorError(f"Must specify the 'SQLALCHEMY_DATABASE_URI' in the configuration file.")
+        if uri is None:
+            raise SatorError(f"Must specify the 'SQLALCHEMY_DATABASE_URI' in the configuration file.")
 
     if not database_exists(uri):
         try:

@@ -52,6 +52,10 @@ class Base(Controller):
         # setup database
         tables_path = Path(__file__).parent.parent / 'config' / 'tables'
         from sator.core.models import init_flask_db
+
+        if self.app.pargs.uri is "":
+            self.app.log.warning(f"Provided URI is empty")
+
         init_flask_db(tables_path, flask_app, self.app.log, self.app.pargs.uri)
 
         self.app.extend('flask_app', flask_app)

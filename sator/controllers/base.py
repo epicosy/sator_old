@@ -32,9 +32,17 @@ class Base(Controller):
         if self.app.config.has_section('flask'):
             self.flask_configs = {k.upper(): v for k, v in self.app.config.get_dict()['flask'].items()}
 
-        if 'RUN_PORT' not in self.flask_configs:
-            self.flask_configs['RUN_PORT'] = 3000
+        _port = self.flask_configs.get('RUN_PORT')
+
+        if self.app.pargs.port:
+            if _port:
+                self.app.log.warning(f"Overwriting config port number from {_port} to '{self.app.pargs.port}'")
+            self.flask_configs['RUN_PORT'] = self.app.pargs.port
+        elif _port:
+            self.app.log.warning(f"Using port number from config '{_port}'")
+        else:
             self.app.log.warning("No port number specified, setting default port number to '3000'")
+            self.flask_configs['RUN_PORT'] = 3000
 
         if 'DEBUG' not in self.flask_configs:
             self.flask_configs['DEBUG'] = self.app.config.get('sator', 'debug')
@@ -44,7 +52,7 @@ class Base(Controller):
         # setup database
         tables_path = Path(__file__).parent.parent / 'config' / 'tables'
         from sator.core.models import init_flask_db
-        init_flask_db(tables_path, flask_app, self.app.log)
+        init_flask_db(tables_path, flask_app, self.app.log, self.app.pargs.uri)
 
         self.app.extend('flask_app', flask_app)
 
@@ -57,7 +65,8 @@ class Base(Controller):
         help='Launches the server API',
         arguments=[
             (['-p', '--port'], {'help': 'Port for server. (Overwrites config port)', 'type': int, 'required': False}),
-            (['-a', '--address'], {'help': 'IPv4 host address for server. ', 'type': str, 'default': 'localhost'})
+            (['-a', '--address'], {'help': 'IPv4 host address for server. ', 'type': str, 'default': 'localhost'}),
+            (['-u', '--uri'], {'help': 'URI for database. (Overwrites config uri)', 'type': str, 'required': False})
         ]
     )
     def run(self):

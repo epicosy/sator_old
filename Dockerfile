@@ -12,4 +12,4 @@ ARG DATABASE_URI
 ARG PORT
 ENV db_uri=$DATABASE_URI
 
-ENTRYPOINT sator run -u $db_uri -p $PORT
+ENTRYPOINT sator run -u ${db_uri} -p $PORT

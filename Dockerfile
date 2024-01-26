@@ -1,13 +1,10 @@
 FROM python:3.10
 
-ARG PORT
-ARG DATABASE_URI
-ENV DATABASE_URI=${DATABASE_URI}
-EXPOSE 5432
-
 WORKDIR /opt/sator
 COPY . /opt/sator
 
+# dependencies
+RUN apt-get update
 RUN pip install .
 RUN ./setup.sh
 

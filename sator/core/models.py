@@ -560,6 +560,8 @@ def init_flask_db(tables_path, flask_app, logger, uri: str = None):
         if uri is None:
             raise SatorError(f"Must specify the 'SQLALCHEMY_DATABASE_URI' in the configuration file.")
 
+    flask_app.config['SQLALCHEMY_DATABASE_URI'] = uri
+
     if not database_exists(uri):
         try:
             logger.info(f"Creating database")

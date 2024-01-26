@@ -56,8 +56,6 @@ class Base(Controller):
         if self.app.pargs.uri is "":
             self.app.log.warning(f"Provided URI is empty")
 
-        self.app.log.warning(f"Debug URI '{self.app.pargs.uri}'")
-
         init_flask_db(tables_path, flask_app, self.app.log, self.app.pargs.uri)
 
         self.app.extend('flask_app', flask_app)

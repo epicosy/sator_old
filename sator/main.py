@@ -2,6 +2,8 @@ from cement import App, TestApp
 from cement.core.exc import CaughtSignal
 from .core.exc import SatorError
 from .controllers.base import Base
+from .controllers.database import Database
+from .controllers.server import Server
 from pathlib import Path
 from sator.handlers.multi_task import MultiTaskHandler
 from sator.handlers.nvd import NVDHandler
@@ -44,7 +46,7 @@ class Sator(App):
 
         # register handlers
         handlers = [
-            Base, MultiTaskHandler, NVDHandler, GithubHandler, OpenAIHandler
+            Base, Database, Server, MultiTaskHandler, NVDHandler, GithubHandler, OpenAIHandler
         ]
 
     def get_config(self, key: str):
@@ -66,6 +68,10 @@ class Sator(App):
         working_dir.mkdir(exist_ok=True, parents=True)
         self.extend('working_dir', working_dir)
 
+    def set_flask_configs(self):
+        _flask_configs = {k.upper(): v for k, v in self.config.get_dict()['flask'].items()}
+        self.extend('flask_configs', _flask_configs)
+
 
 class SatorTest(TestApp, Sator):
     """A sub-class of Sator that is better suited for testing."""
@@ -78,6 +84,7 @@ def main():
     with Sator() as app:
         try:
             app.setup_working_dir()
+            app.set_flask_configs()
             app.run()
 
         except AssertionError as e:

@@ -27,11 +27,11 @@ sator:
 
 flask:
   SQLALCHEMY_TRACK_MODIFICATIONS: false
-  CSRF_ENABLED: True
+  CSRF_ENABLED: true
   SECRET_KEY: "SECRET_KEY"
   SQLALCHEMY_DATABASE_URI: postgresql://user1:user123@localhost:5432/sator
   RUN_PORT: 3001
-  ENV: development
+  DEBUG: false
 
 
 log.colorlog:

@@ -44,7 +44,8 @@ dependencies = [
     "cpeparser~=0.0.2",
     "openai~=0.27.6",
     "beautifulsoup4~=4.12.2",
-    "javalang~=0.13.0"
+    "javalang~=0.13.0",
+    "waitress~=2.1.2"
 ]
 
 [project.optional-dependencies]

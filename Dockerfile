@@ -7,4 +7,4 @@ COPY . /opt/sator
 RUN pip install .
 RUN ./setup.sh
 
-ENTRYPOINT sator run -a 0.0.0.0 -p $PORT -u $SQLALCHEMY_DATABASE_URI
+ENTRYPOINT sator -u $SQLALCHEMY_DATABASE_URI server run -a 0.0.0.0 -p $PORT -k $SECRET_KEY

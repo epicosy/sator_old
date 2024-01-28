@@ -4,8 +4,10 @@ from typing import List
 import pandas as pd
 
 from pathlib import Path
-from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy_utils import create_database, database_exists
+from flask_sqlalchemy import SQLAlchemy
 
 from sator.core.exc import SatorError
 
@@ -541,6 +543,10 @@ def shutdown_session(exception=None):
 
 
 def init_db(uri: str, tables_path: Path, logger):
+    # create an engine object
+    engine = create_engine(uri)
+    db.metadata.bind = engine
+
     if not database_exists(uri):
         try:
             logger.info(f"Creating database")
@@ -548,31 +554,10 @@ def init_db(uri: str, tables_path: Path, logger):
         except TypeError as te:
             raise SatorError(f"Could not create database {uri.split('@')}. {te}")
 
-    db.create_all()
+    Session = scoped_session(sessionmaker(bind=engine))
+    # Bind the session to the db object
+    db.session = Session
+    # Create tables
+    db.metadata.create_all(bind=engine)
+    db.query = db.session.query_property()
     init_db_command(tables_path, logger)
-
-
-def init_flask_db(tables_path, flask_app, logger, uri: str = None):
-    if not uri:
-        logger.info(f"Using the default database URI from the configuration file.")
-        uri = flask_app.config.get('SQLALCHEMY_DATABASE_URI', None)
-
-        if uri is None:
-            raise SatorError(f"Must specify the 'SQLALCHEMY_DATABASE_URI' in the configuration file.")
-
-    flask_app.config['SQLALCHEMY_DATABASE_URI'] = uri
-
-    if not database_exists(uri):
-        try:
-            logger.info(f"Creating database")
-            create_database(url=uri, encoding='utf8')
-        except TypeError as te:
-            raise SatorError(f"Could not create database {uri.split('@')}. {te}")
-
-    with flask_app.app_context():
-        db.init_app(flask_app)
-
-        db.create_all()
-        init_db_command(tables_path, logger)
-
-        flask_app.teardown_appcontext(shutdown_session)

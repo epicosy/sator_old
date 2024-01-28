@@ -61,18 +61,19 @@ class Server(Controller):
     def _post_argument_parsing(self):
         super()._post_argument_parsing()
 
-        self._set_port()
-        self._set_debug()
-        self._set_secret_key()
+        if self.app.pargs.__controller_namespace__ == 'server':
+            self._set_port()
+            self._set_debug()
+            self._set_secret_key()
 
-        flask_app = create_flask_app(configs=self.app.flask_configs)
+            flask_app = create_flask_app(configs=self.app.flask_configs)
 
-        with flask_app.app_context():
-            from sator.core.models import db, shutdown_session
-            db.init_app(flask_app)
-            flask_app.teardown_appcontext(shutdown_session)
+            with flask_app.app_context():
+                from sator.core.models import db, shutdown_session
+                db.init_app(flask_app)
+                flask_app.teardown_appcontext(shutdown_session)
 
-        self.app.extend('flask_app', flask_app)
+            self.app.extend('flask_app', flask_app)
 
     @ex(
         help='Launches the server API'

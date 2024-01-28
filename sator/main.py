@@ -4,6 +4,7 @@ from .core.exc import SatorError
 from .controllers.base import Base
 from .controllers.database import Database
 from .controllers.server import Server
+from .controllers.source import Source
 from pathlib import Path
 from sator.handlers.multi_task import MultiTaskHandler
 from sator.handlers.nvd import NVDHandler
@@ -46,7 +47,7 @@ class Sator(App):
 
         # register handlers
         handlers = [
-            Base, Database, Server, MultiTaskHandler, NVDHandler, GithubHandler, OpenAIHandler
+            Base, Database, Server, Source, MultiTaskHandler, NVDHandler, GithubHandler, OpenAIHandler
         ]
 
     def get_config(self, key: str):

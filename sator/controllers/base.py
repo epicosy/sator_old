@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from cement import Controller, ex
 
 from sator import __version__
@@ -45,12 +43,6 @@ class Base(Controller):
         """Default action if no sub-command is passed."""
 
         self.app.args.print_help()
-
-    @ex(
-        help='Gets data from NVD'
-    )
-    def nvd(self):
-        self.app.handler.get('handlers', 'nvd', setup=True).run()
 
     @ex(
         help='Gets data from GitHub',

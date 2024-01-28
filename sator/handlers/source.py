@@ -112,7 +112,7 @@ class SourceHandler(HandlersInterface, Handler):
         self._github_handler = None
 
     def download_file_from_url(self, url: str, extract: bool = False) -> Union[Tuple[Response, Path], None]:
-
+        # TODO: checking by the name if the file exists is not reliable; we should also check the file size
         if 'http' not in url:
             self.app.lof.warning(f"URL {url} is not valid.")
             return None
@@ -376,26 +376,25 @@ class SourceHandler(HandlersInterface, Handler):
                 self.update_parent_commits(repo, commit, commit_model)
 
     def add_metadata(self):
-        with self.app.flask_app.app_context():
-            self.init_global_context()
+        self.init_global_context()
 
-            for repo_model in tqdm(Repository.query.join(Commit).all()):
-                if repo_model.available is False:
-                    continue
+        for repo_model in tqdm(Repository.query.join(Commit).all()):
+            if repo_model.available is False:
+                continue
 
-                if self.has_commits(repo_model.commits):
-                    self.app.log.info(f"Skipping {repo_model.owner}/{repo_model.name}...")
-                    continue
+            if self.has_commits(repo_model.commits):
+                self.app.log.info(f"Skipping {repo_model.owner}/{repo_model.name}...")
+                continue
 
-                self.app.log.info(f"Getting metadata for {repo_model.owner}/{repo_model.name}...")
-                repo = self.github_handler.get_repo(repo_model.owner, project=repo_model.name)
+            self.app.log.info(f"Getting metadata for {repo_model.owner}/{repo_model.name}...")
+            repo = self.github_handler.get_repo(repo_model.owner, project=repo_model.name)
 
-                if not repo:
-                    self.update_unavailable_repository(repo_model)
-                    continue
+            if not repo:
+                self.update_unavailable_repository(repo_model)
+                continue
 
-                if repo_model.available is None:
-                    self.update_awaiting_repository(repo, repo_model)
+            if repo_model.available is None:
+                self.update_awaiting_repository(repo, repo_model)
 
-                for commit_model in tqdm(repo_model.commits):
-                    self.update_commit(repo, commit_model)
+            for commit_model in tqdm(repo_model.commits):
+                self.update_commit(repo, commit_model)

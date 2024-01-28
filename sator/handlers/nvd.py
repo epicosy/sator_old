@@ -27,7 +27,7 @@ class NVDHandler(SourceHandler):
         base_url = 'https://nvd.nist.gov/feeds/json/cve/1.1/nvdcve-1.1-{year}.json.zip'
 
         # download from source and extract
-        for year in tqdm(range(1988, 2024, 1)):
+        for year in tqdm(range(1988, 2025, 1)):
             url = base_url.format(year=year)
             self.multi_task_handler.add(url=url, extract=True)
 
@@ -35,30 +35,28 @@ class NVDHandler(SourceHandler):
         results = self.multi_task_handler.results()
         del self.multi_task_handler
 
-        with self.app.flask_app.app_context():
-            self.init_global_context()
+        self.init_global_context()
 
         # parse json files into a single dataframe
         for _, file_path in tqdm(results):
-            self.multi_task_handler.add(file_path=file_path, context=self.app.flask_app.app_context())
+            self.multi_task_handler.add(file_path=file_path)
 
         self.multi_task_handler(func=self.parse)
         self.multi_task_handler.results()
 
-    def parse(self, file_path: Path, context: AppContext):
+    def parse(self, file_path: Path):
         self.app.log.info(f"Parsing {file_path}...")
 
         with file_path.open(mode='r') as f:
             cve_ids = json.load(f)["CVE_Items"]
 
-            with context:
-                for cve in tqdm(cve_ids, desc=f"Parsing {file_path}"):
-                    cve_id = self.get_cve(cve)
+            for cve in tqdm(cve_ids, desc=f"Parsing {file_path}"):
+                cve_id = self.get_cve(cve)
 
-                    try:
-                        self._process_cve(cve_id=cve_id, cve=cve)
-                    except IntegrityError as ie:
-                        self.app.log.warning(f"{ie}")
+                try:
+                    self._process_cve(cve_id=cve_id, cve=cve)
+                except IntegrityError as ie:
+                    self.app.log.warning(f"{ie}")
 
     def _process_cve(self, cve_id: str, cve: dict):
         if not self.has_id(cve_id, 'vulns'):

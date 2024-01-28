@@ -542,10 +542,16 @@ def shutdown_session(exception=None):
     db.session.remove()
 
 
-def init_db(uri: str, tables_path: Path, logger):
-    # create an engine object
+def set_db(uri: str):
     engine = create_engine(uri)
     db.metadata.bind = engine
+    Session = scoped_session(sessionmaker(bind=engine))
+    db.session = Session
+    db.query = db.session.query_property()
+
+
+def init_db(uri: str, tables_path: Path, logger):
+    set_db(uri)
 
     if not database_exists(uri):
         try:
@@ -554,10 +560,6 @@ def init_db(uri: str, tables_path: Path, logger):
         except TypeError as te:
             raise SatorError(f"Could not create database {uri.split('@')}. {te}")
 
-    Session = scoped_session(sessionmaker(bind=engine))
-    # Bind the session to the db object
-    db.session = Session
     # Create tables
-    db.metadata.create_all(bind=engine)
-    db.query = db.session.query_property()
+    db.metadata.create_all()
     init_db_command(tables_path, logger)

@@ -22,7 +22,10 @@ def get_digest(string: str):
 
 
 def extract_company(email: str):
-    return re.findall(r"\@(.*?)\.", email)[0]
+    res = re.findall(r"\@(.*?)\.", email)
+
+    if res:
+        return res[0]
 
 
 def remove_comments(string):

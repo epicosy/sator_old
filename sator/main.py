@@ -11,7 +11,7 @@ from sator.handlers.nvd import NVDHandler
 from sator.core.interfaces import HandlersInterface
 from sator.handlers.github import GithubHandler
 from sator.handlers.openai import OpenAIHandler
-
+from sator.handlers.data import DataHandler
 
 class Sator(App):
     """vulnerability database primary application."""
@@ -47,7 +47,7 @@ class Sator(App):
 
         # register handlers
         handlers = [
-            Base, Database, Server, Source, MultiTaskHandler, NVDHandler, GithubHandler, OpenAIHandler
+            Base, Database, Server, Source, MultiTaskHandler,DataHandler, NVDHandler, GithubHandler, OpenAIHandler
         ]
 
     def get_config(self, key: str):

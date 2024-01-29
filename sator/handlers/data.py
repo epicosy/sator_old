@@ -14,6 +14,7 @@ from sator.core.exc import SatorError
 from sator.core.models import Vulnerability, db, Reference, VulnerabilityCWE, ReferenceTag, Repository, \
     Commit, Configuration, ConfigurationVulnerability, Vendor, Product
 from sator.handlers.source import SourceHandler
+import time
 
 # TODO: Get metrics for version 3.0
 
@@ -26,8 +27,10 @@ class DataHandler(SourceHandler):
         super().__init__(**kw)
 
     def run(self):
+    #   with self.app.flask_app.app_context():
+        self.init_global_context()
         months = ['0'+str(i) for i in range(1,10)]+['10','11','12']
-        for year in (range(1988, 2024, 1)):
+        for year in (range(2000, 2024, 1)):
           for i in range(len(months)):
             month = months[i]
             if month == '12':
@@ -43,6 +46,7 @@ class DataHandler(SourceHandler):
                 'pubEndDate': f'{year}-{next_month}-{day}T00:00:00.000'
             }
 
+
             try:
                 response = requests.get(base_url, params=params)
                 response.raise_for_status()  # Raise an exception for HTTP errors
@@ -51,10 +55,13 @@ class DataHandler(SourceHandler):
                 print(response.json()["totalResults"])
                 if response.json()["totalResults"] != 0:
                     print("result")
-                    print(response.json())
+                    self.parse(response.json())
+
+                    
 
             except RequestException as e:
                 print(f"Error while fetching data from NVD: {e}")
+            time.sleep(5)
 
 
     # def run(self):
@@ -79,20 +86,25 @@ class DataHandler(SourceHandler):
     #     self.multi_task_handler(func=self.parse)
     #     self.multi_task_handler.results()
 
-    def parse(self, file_path: Path, context: AppContext):
-        self.app.log.info(f"Parsing {file_path}...")
+    def parse(self, json_file):
 
-        with file_path.open(mode='r') as f:
-            cve_ids = json.load(f)["CVE_Items"]
+        try:
+            vulnerabilities = json_file["vulnerabilities"]
 
-            with context:
-                for cve in tqdm(cve_ids, desc=f"Parsing {file_path}"):
+           
+            for cve_dict in vulnerabilities:
+                    cve = cve_dict["cve"]
+             
                     cve_id = self.get_cve(cve)
-
+               
                     try:
                         self._process_cve(cve_id=cve_id, cve=cve)
+                    
                     except IntegrityError as ie:
                         self.app.log.warning(f"{ie}")
+        except Exception as e:
+            self.app.log.warning(f"General Error: {e}")
+
 
     def _process_cve(self, cve_id: str, cve: dict):
         if not self.has_id(cve_id, 'vulns'):
@@ -216,51 +228,43 @@ class DataHandler(SourceHandler):
 
     @staticmethod
     def get_cve(data: pd.DataFrame):
-        return data["cve"]["CVE_data_meta"]["ID"]
+        return data["id"]
 
     @staticmethod
     def get_description(data):
-        return data["cve"]["description"]["description_data"][0]["value"]
+        return data["descriptions"][0]["value"]
 
     @staticmethod
     def get_published_date(data):
-        return data["publishedDate"]
+        return data["published"]
 
     @staticmethod
     def get_last_modified_date(data):
-        return data["lastModifiedDate"]
+        return data["lastModified"]
 
     @staticmethod
     def get_severity(data):
-        if data["impact"]:
-            if "baseMetricV2" in data["impact"].keys():
-                return data["impact"]["baseMetricV2"]["severity"]
-        return None
+        print(data)
+        return data['metrics']['cvssMetricV2'][0]["baseSeverity"]
 
     @staticmethod
     def get_exploitability(data):
-        if data["impact"]:
-            if "baseMetricV2" in data["impact"].keys():
-                return data["impact"]["baseMetricV2"]["exploitabilityScore"]
-        return None
+        return data['metrics']['cvssMetricV2'][0]["exploitabilityScore"]
 
     @staticmethod
     def get_impact(data):
-        if data["impact"]:
-            if "baseMetricV2" in data["impact"].keys():
-                return data["impact"]["baseMetricV2"]["impactScore"]
-        return None
+        return data['metrics']['cvssMetricV2'][0]["impactScore"]
 
     @staticmethod
     def get_assigner(data):
-        return data["cve"]["CVE_data_meta"]["ASSIGNER"]
+        return data['sourceIdentifier']
 
     @staticmethod
     def get_references(data):
         refs = set()
         refs_list = []
 
-        for ref in data["cve"]["references"]["reference_data"]:
+        for ref in data["references"]:
             if ref['url'] not in refs:
                 refs.add(ref['url'])
                 refs_list.append(ref)
@@ -271,8 +275,8 @@ class DataHandler(SourceHandler):
     def get_configs(data):
         configs = []
 
-        for node in data['configurations']['nodes']:
-            for cpe in node['cpe_match']:
+        for node in data['configurations'][0]['nodes']:
+            for cpe in node['cpeMatch']:
                 configs.append(cpe)
 
         return configs

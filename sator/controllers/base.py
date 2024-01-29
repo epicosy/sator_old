@@ -67,3 +67,11 @@ class Base(Controller):
         """Generate sub-command."""
         self.app.handler.get('handlers', 'openai', setup=True).generate()
 
+    @ex(
+        help='Gets data'
+    )
+    def data(self):
+        """Generate sub-command."""
+        self.app.handler.get('handlers', 'data', setup=True).run()
+
+

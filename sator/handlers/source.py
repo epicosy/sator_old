@@ -87,6 +87,7 @@ class SourceHandler(HandlersInterface, Handler):
         with self.lock:
             self.db_ids[_type].add(_id)
 
+
     @staticmethod
     def get_digest(string: str):
         return hashlib.md5(string.encode('utf-8')).hexdigest()
@@ -118,6 +119,7 @@ class SourceHandler(HandlersInterface, Handler):
             return None
 
         file_path = self.app.working_dir / Path(urlparse(url).path).name
+        print(file_path)
         extract_file_path = self.app.working_dir / file_path.stem
         response = requests.get(url, stream=True, allow_redirects=True)
 

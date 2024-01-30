@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List
 
 import requests
 import hashlib
@@ -158,3 +158,13 @@ class JavaMethodExtractor:
                 meth_text = meth_text[:meth_text.rfind("}") + 1]
 
         return meth_text
+
+
+def get_allowed_origins():
+    import os
+    origins = os.environ.get('ALLOWED_ORIGINS', [])
+
+    if isinstance(origins, str):
+        return origins.split(',')
+
+    return origins

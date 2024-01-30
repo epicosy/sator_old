@@ -68,7 +68,7 @@ class Server(Controller):
             self._set_secret_key()
 
             allowed_origins = get_allowed_origins()
-            allowed_origins.append(f"http://{self.app.pargs.address}")
+            allowed_origins.append(f"http://{self.app.pargs.address}:*")
             self.app.log.info(f"Allowed origins: {allowed_origins}")
             flask_app = create_flask_app(configs=self.app.flask_configs, allowed_origins=allowed_origins)
 

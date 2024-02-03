@@ -8,13 +8,14 @@ from pathlib import Path
 from flask.ctx import AppContext
 from cpeparser import CpeParser
 import requests
-from requests.exceptions import RequestException
-
+from requests.exceptions import RequestException, HTTPError
+import traceback  
 from sator.core.exc import SatorError
 from sator.core.models import Vulnerability, db, Reference, VulnerabilityCWE, ReferenceTag, Repository, \
     Commit, Configuration, ConfigurationVulnerability, Vendor, Product
 from sator.handlers.source import SourceHandler
 import time
+
 
 # TODO: Get metrics for version 3.0
 
@@ -27,10 +28,9 @@ class DataHandler(SourceHandler):
         super().__init__(**kw)
 
     def run(self):
-    #   with self.app.flask_app.app_context():
         self.init_global_context()
         months = ['0'+str(i) for i in range(1,10)]+['10','11','12']
-        for year in (range(2000, 2024, 1)):
+        for year in (range(1988, 2024, 1)):
           for i in range(len(months)):
             month = months[i]
             if month == '12':
@@ -46,74 +46,67 @@ class DataHandler(SourceHandler):
                 'pubEndDate': f'{year}-{next_month}-{day}T00:00:00.000'
             }
 
-
             try:
+                print("requesting vulnerabilities from "+ str(year)+ "/"+ str(month)+"/"+day+"-"+str(next_month)+"/"+str(day))
                 response = requests.get(base_url, params=params)
                 response.raise_for_status()  # Raise an exception for HTTP errors
-                print("ok")
-                print(year)
-                print(response.json()["totalResults"])
+                
+                # print("ok")
+                # print(year)
+                # print(month)
                 if response.json()["totalResults"] != 0:
-                    print("result")
                     self.parse(response.json())
 
-                    
-
+            except HTTPError as e:
+                # Handle HTTP errors here
+                print(f"HTTP Error while fetching data for {year}-{month} to {next_year}-{next_month}-{day}: {e}")
+                
             except RequestException as e:
-                print(f"Error while fetching data from NVD: {e}")
-            time.sleep(5)
+                # Handle other requests related errors
+                print(f"Request Exception while fetching data for {year}-{month} to {next_year}-{next_month}-{day}: {e}")
+
+            time.sleep(10)
 
 
-    # def run(self):
-    #     base_url = 'https://nvd.nist.gov/feeds/json/cve/1.1/nvdcve-1.1-{year}.json.zip'
+            
 
-    #     # download from source and extract
-    #     for year in tqdm(range(1988, 2024, 1)):
-    #         url = base_url.format(year=year)
-    #         self.multi_task_handler.add(url=url, extract=True)
 
-    #     self.multi_task_handler(func=self.download_file_from_url)
-    #     results = self.multi_task_handler.results()
-    #     del self.multi_task_handler
+            
 
-    #     with self.app.flask_app.app_context():
-    #         self.init_global_context()
 
-    #     # parse json files into a single dataframe
-    #     for _, file_path in tqdm(results):
-    #         self.multi_task_handler.add(file_path=file_path, context=self.app.flask_app.app_context())
-
-    #     self.multi_task_handler(func=self.parse)
-    #     self.multi_task_handler.results()
 
     def parse(self, json_file):
+        
 
         try:
             vulnerabilities = json_file["vulnerabilities"]
-
-           
             for cve_dict in vulnerabilities:
-                    cve = cve_dict["cve"]
-             
-                    cve_id = self.get_cve(cve)
-               
-                    try:
-                        self._process_cve(cve_id=cve_id, cve=cve)
-                    
-                    except IntegrityError as ie:
-                        self.app.log.warning(f"{ie}")
+                cve = cve_dict["cve"]
+                cve_id = self.get_cve(cve)
+                try:
+                    self._process_cve(cve_id=cve_id, cve=cve)
+                except IntegrityError as ie:
+                    # Use traceback.format_exc() to get the stack trace information as a string
+                    self.app.log.warning(f"{ie}\n{traceback.format_exc()}")
         except Exception as e:
-            self.app.log.warning(f"General Error: {e}")
+            # Similarly, log the general exception with traceback
+            self.app.log.warning(f"General Error: {e}\n{traceback.format_exc()}")
+
+
+
 
 
     def _process_cve(self, cve_id: str, cve: dict):
+     
         if not self.has_id(cve_id, 'vulns'):
             self.add_id(cve_id, 'vulns')
+        
             db.session.add(Vulnerability(id=cve_id, description=self.get_description(cve),
                                          assigner=self.get_assigner(cve), severity=self.get_severity(cve),
                                          impact=self.get_impact(cve), exploitability=self.get_exploitability(cve),
                                          published_date=self.get_published_date(cve),
                                          last_modified_date=self.get_last_modified_date(cve)))
+
             db.session.commit()
 
             for cwe in self.get_cwe_ids(cve):
@@ -124,13 +117,15 @@ class DataHandler(SourceHandler):
 
         for ref in self.get_references(cve):
             ref_digest = self.get_digest(ref['url'])
+            # print("ref")
+            # print(ref)
 
             if not self.has_id(ref_digest, 'refs'):
                 self.add_id(ref_digest, 'refs')
                 db.session.add(Reference(id=ref_digest, url=ref['url'], vulnerability_id=cve_id))
                 db.session.commit()
-
-                for tag in ref['tags']:
+                for tag in ref.get("tags",[]):
+                # for tag in ref['tags']:
                     db.session.add(ReferenceTag(reference_id=ref_digest, tag_id=self.tag_ids[tag]))
                 db.session.commit()
 
@@ -150,7 +145,7 @@ class DataHandler(SourceHandler):
                     if not self.has_id(commit_digest, 'commits'):
                         self.add_id(commit_digest, 'commits')
                         db.session.add(Commit(id=commit_digest, url=normalized_commit.url, sha=normalized_commit.sha,
-                                              kind='|'.join(ref['tags']), vulnerability_id=cve_id,
+                                              kind='|'.join(ref.get("tags",[])), vulnerability_id=cve_id,
                                               repository_id=repo_digest))
                         db.session.commit()
 
@@ -158,6 +153,7 @@ class DataHandler(SourceHandler):
                     continue
 
             configurations = self.get_configs(cve)
+  
 
             for raw_config in configurations:
                 config = self.parse_config(raw_config)
@@ -204,18 +200,19 @@ class DataHandler(SourceHandler):
     @staticmethod
     def parse_config(config: dict):
         cpe = CpeParser()
-        result = cpe.parser(config['cpe23Uri'])
+        result = cpe.parser(config['criteria'])
         result['vulnerable'] = config.get('vulnerable', None)
-        result['cpe'] = config['cpe23Uri']
-
+        result['cpe'] = config['criteria']
         return result
 
     @staticmethod
     def get_cwe_ids(cve):
+        # print("input")
+        # print(cve)
         cwes = set()
 
-        for data in cve["cve"]["problemtype"]["problemtype_data"]:
-            for cwe in data["description"]:
+        # for data in cve["cve"]["problemtype"]["problemtype_data"]:
+        for cwe in cve["descriptions"]:
                 if cwe["value"] and cwe['value'] not in ['NVD-CWE-Other', 'NVD-CWE-noinfo']:
 
                     try:
@@ -244,17 +241,22 @@ class DataHandler(SourceHandler):
 
     @staticmethod
     def get_severity(data):
-        print(data)
+     if "cvssMetricV2" in data['metrics']:
         return data['metrics']['cvssMetricV2'][0]["baseSeverity"]
+     else:
+        return None 
 
     @staticmethod
     def get_exploitability(data):
+      if "cvssMetricV2" in data['metrics']:
         return data['metrics']['cvssMetricV2'][0]["exploitabilityScore"]
-
+      return None 
     @staticmethod
     def get_impact(data):
+        
+      if "cvssMetricV2" in data['metrics']:
         return data['metrics']['cvssMetricV2'][0]["impactScore"]
-
+      return None 
     @staticmethod
     def get_assigner(data):
         return data['sourceIdentifier']
@@ -274,12 +276,14 @@ class DataHandler(SourceHandler):
     @staticmethod
     def get_configs(data):
         configs = []
-
+        if 'configurations' not in data:
+            return []
         for node in data['configurations'][0]['nodes']:
             for cpe in node['cpeMatch']:
                 configs.append(cpe)
 
         return configs
+
 
 def load(app):
     app.handler.register(DataHandler)

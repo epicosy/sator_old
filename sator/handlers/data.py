@@ -11,7 +11,7 @@ import requests
 from requests.exceptions import RequestException, HTTPError
 import traceback  
 from sator.core.exc import SatorError
-from sator.core.models import Vulnerability, db, Reference, VulnerabilityCWE, ReferenceTag, Repository, \
+from sator.core.models import CVSS3, CVSS2, Vulnerability, db, Reference, VulnerabilityCWE, ReferenceTag, Repository, \
     Commit, Configuration, ConfigurationVulnerability, Vendor, Product
 from sator.handlers.source import SourceHandler
 import time
@@ -30,7 +30,7 @@ class DataHandler(SourceHandler):
     def run(self):
         self.init_global_context()
         months = ['0'+str(i) for i in range(1,10)]+['10','11','12']
-        for year in (range(1988, 2024, 1)):
+        for year in (range(2023, 2024, 1)):
           for i in range(len(months)):
             month = months[i]
             if month == '12':
@@ -55,23 +55,19 @@ class DataHandler(SourceHandler):
                 # print(year)
                 # print(month)
                 if response.json()["totalResults"] != 0:
+                    # print(response.json())
                     self.parse(response.json())
 
             except HTTPError as e:
                 # Handle HTTP errors here
-                print(f"HTTP Error while fetching data for {year}-{month} to {next_year}-{next_month}-{day}: {e}")
+                print(f"HTTP Error while fetching data for {year}-{month} to {next_month}-{day}: {e}")
                 
             except RequestException as e:
                 # Handle other requests related errors
-                print(f"Request Exception while fetching data for {year}-{month} to {next_year}-{next_month}-{day}: {e}")
+                print(f"Request Exception while fetching data for {year}-{month} to {next_month}-{day}: {e}")
 
             time.sleep(10)
 
-
-            
-
-
-            
 
 
 
@@ -97,15 +93,19 @@ class DataHandler(SourceHandler):
 
 
     def _process_cve(self, cve_id: str, cve: dict):
+        for i,j in cve.items():
+            print(i)
+            print(j)
      
         if not self.has_id(cve_id, 'vulns'):
             self.add_id(cve_id, 'vulns')
         
             db.session.add(Vulnerability(id=cve_id, description=self.get_description(cve),
-                                         assigner=self.get_assigner(cve), severity=self.get_severity(cve),
-                                         impact=self.get_impact(cve), exploitability=self.get_exploitability(cve),
+                                         assigner=self.get_assigner(cve),
                                          published_date=self.get_published_date(cve),
-                                         last_modified_date=self.get_last_modified_date(cve)))
+                                         last_modified_date=self.get_last_modified_date(cve),
+                                         vulnStatus = ""),
+                                       )
 
             db.session.commit()
 
@@ -196,6 +196,62 @@ class DataHandler(SourceHandler):
                     db.session.add(ConfigurationVulnerability(configuration_id=config_digest, vulnerability_id=cve_id))
                     self.add_id(config_vuln, 'config_vuln')
                     db.session.commit()
+        if cve["metrics"]:
+            metrics = cve["metrics"]
+            if "cvssMetricV31" in metrics:
+                for cvss_data in metrics["cvssMetricV31"]:
+                    cvss3_instance = CVSS3(
+                               
+                                cve_id = cve_id,
+                                source=cvss_data['source'],
+                                type=cvss_data['type'],
+                                exploitabilityScore=cvss_data['exploitabilityScore'],
+                                impactScore=cvss_data['impactScore'],
+                                cvssData_version=cvss_data['cvssData']['version'],
+                                cvssData_vectorString=cvss_data['cvssData']['vectorString'],
+                                cvssData_attackVector=cvss_data['cvssData']['attackVector'],
+                                cvssData_attackComplexity=cvss_data['cvssData']['attackComplexity'],
+                                cvssData_privilegesRequired=cvss_data['cvssData']['privilegesRequired'],
+                                cvssData_userInteraction=cvss_data['cvssData']['userInteraction'],
+                                cvssData_scope=cvss_data['cvssData']['scope'],
+                                cvssData_confidentialityImpact=cvss_data['cvssData']['confidentialityImpact'],
+                                cvssData_integrityImpact=cvss_data['cvssData']['integrityImpact'],
+                                cvssData_availabilityImpact=cvss_data['cvssData']['availabilityImpact'],
+                                cvssData_baseScore=cvss_data['cvssData']['baseScore'],
+                                cvssData_baseSeverity=cvss_data['cvssData']['baseSeverity']
+                            )
+                    db.session.add(cvss3_instance)
+                    db.session.commit()
+            if "cvssMetricV2" in metrics:
+                for cvss_data_v2 in metrics["cvssMetricV2"]:
+                    cvss2_instance = CVSS2(
+                               
+                                cve_id = cve_id,
+                                source=cvss_data_v2['source'],
+                                type=cvss_data_v2['type'],
+                                cvssData_version=cvss_data_v2['cvssData']['version'],
+                                cvssData_vectorString=cvss_data_v2['cvssData']['vectorString'],
+                                cvssData_accessVector=cvss_data_v2['cvssData']['accessVector'],
+                                cvssData_accessComplexity=cvss_data_v2['cvssData']['accessComplexity'],
+                                cvssData_authentication=cvss_data_v2['cvssData']['authentication'],
+                                cvssData_confidentialityImpact=cvss_data_v2['cvssData']['confidentialityImpact'],
+                                cvssData_integrityImpact=cvss_data_v2['cvssData']['integrityImpact'],
+                                cvssData_availabilityImpact=cvss_data_v2['cvssData']['availabilityImpact'],
+                                cvssData_baseScore=cvss_data_v2['cvssData']['baseScore'],
+                                baseSeverity=cvss_data_v2['baseSeverity'],
+                                exploitabilityScore=cvss_data_v2['exploitabilityScore'],
+                                impactScore=cvss_data_v2['impactScore'],
+                                acInsufInfo=cvss_data_v2['acInsufInfo'],
+                                obtainAllPrivilege=cvss_data_v2['obtainAllPrivilege'],
+                                obtainUserPrivilege=cvss_data_v2['obtainUserPrivilege'],
+                                obtainOtherPrivilege=cvss_data_v2['obtainOtherPrivilege'],
+                                userInteractionRequired=cvss_data_v2['userInteractionRequired']
+                    )
+                    db.session.add(cvss2_instance)
+                    db.session.commit()
+
+
+
 
     @staticmethod
     def parse_config(config: dict):
@@ -204,7 +260,6 @@ class DataHandler(SourceHandler):
         result['vulnerable'] = config.get('vulnerable', None)
         result['cpe'] = config['criteria']
         return result
-
 
     @staticmethod
     def get_cwe_ids(cve):

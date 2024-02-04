@@ -205,6 +205,7 @@ class DataHandler(SourceHandler):
         result['cpe'] = config['criteria']
         return result
 
+
     @staticmethod
     def get_cwe_ids(cve):
         # print("input")

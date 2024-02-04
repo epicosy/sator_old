@@ -346,6 +346,7 @@ class Grouping(db.Model):
     parent_id = db.Column('parent_id', db.Integer, db.ForeignKey('cwe.id'))
     child_id = db.Column('child_id', db.Integer, db.ForeignKey('cwe.id'))
 
+
     @staticmethod
     def populate(tables_path: Path):
         grouping_df = pd.read_csv(f'{tables_path}/groupings.csv')

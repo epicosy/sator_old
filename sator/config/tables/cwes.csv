@@ -162,7 +162,7 @@ id,name,url,abstraction_id
 385,Covert Timing Channel,https://cwe.mitre.org/data/definitions/385.html,1
 386,Symbolic Name not Mapping to Correct Object,https://cwe.mitre.org/data/definitions/386.html,1
 387,Signal Errors,https://cwe.mitre.org/data/definitions/387.html,6
-389,Error Conditions, Return Values, Status Codes,https://cwe.mitre.org/data/definitions/389.html,6
+389,"Error Conditions, Return Values, Status Codes",https://cwe.mitre.org/data/definitions/389.html,6
 390,Detection of Error Condition Without Action,https://cwe.mitre.org/data/definitions/390.html,1
 391,Unchecked Error Condition,https://cwe.mitre.org/data/definitions/391.html,1
 392,Missing Report of Error Condition,https://cwe.mitre.org/data/definitions/392.html,1
@@ -472,12 +472,12 @@ id,name,url,abstraction_id
 1241,Use of Predictable Algorithm in Random Number Generator,https://cwe.mitre.org/data/definitions/1241.html,1
 1265,Unintended Reentrant Invocation of Non-reentrant Code Via Nested Calls,https://cwe.mitre.org/data/definitions/1265.html,1
 1284,Improper Validation of Specified Quantity in Input,https://cwe.mitre.org/data/definitions/1284.html,1
-1285,Improper Validation of Specified Index, Position, or Offset in Input,https://cwe.mitre.org/data/definitions/1285.html,1
+1285,"Improper Validation of Specified Index, Position, or Offset in Input",https://cwe.mitre.org/data/definitions/1285.html,1
 1286,Improper Validation of Syntactic Correctness of Input,https://cwe.mitre.org/data/definitions/1286.html,1
 1287,Improper Validation of Specified Type of Input,https://cwe.mitre.org/data/definitions/1287.html,1
 1288,Improper Validation of Consistency within Input,https://cwe.mitre.org/data/definitions/1288.html,1
 1289,Improper Validation of Unsafe Equivalence in Input,https://cwe.mitre.org/data/definitions/1289.html,1
-1322,Use of Blocking Code in Single-threaded, Non-blocking Context,https://cwe.mitre.org/data/definitions/1322.html,1
+1322,"Use of Blocking Code in Single-threaded, Non-blocking Context",https://cwe.mitre.org/data/definitions/1322.html,1
 1327,Binding to an Unrestricted IP Address,https://cwe.mitre.org/data/definitions/1327.html,1
 1333,Inefficient Regular Expression Complexity,https://cwe.mitre.org/data/definitions/1333.html,1
 1335,Incorrect Bitwise Shift of Integer,https://cwe.mitre.org/data/definitions/1335.html,1

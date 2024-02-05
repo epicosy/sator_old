@@ -251,6 +251,11 @@ class SourceHandler(HandlersInterface, Handler):
         repo_model.available = True
         repo_model.language = repo.language
         repo_model.description = repo.description
+        repo_model.size = repo.size
+        repo_model.stars = repo.stargazers_count
+        repo_model.forks = repo.forks_count
+        repo_model.watchers = repo.watchers_count
+        repo_model.commits_count = repo.get_commits().totalCount
 
         for topic in repo.topics:
             topic_digest = self.get_digest(topic)

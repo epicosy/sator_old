@@ -278,6 +278,11 @@ class Repository(db.Model):
     available = db.Column('available', db.Boolean, nullable=True)
     description = db.Column('description', db.String, nullable=True)
     language = db.Column('language', db.String, nullable=True)
+    size = db.Column('size', db.Integer, nullable=True)
+    watchers = db.Column('watchers', db.Integer, nullable=True)
+    forks = db.Column('forks', db.Integer, nullable=True)
+    stargazers = db.Column('stargazers', db.Integer, nullable=True)
+    commits_count = db.Column('commits_count', db.Integer, nullable=True)
     commits = db.relationship("Commit", backref="repository")
 
     def save(self):

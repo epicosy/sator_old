@@ -31,3 +31,15 @@ class Source(Controller):
     )
     def collect(self):
         self.app.handler.get('handlers', self.app.pargs.name, setup=True).run()
+
+
+    @ex(
+        help='Gets data from GitHub',
+        arguments=[
+            (['-gt', '--tokens'], {'help': 'Comma-separated list of tokens for the GitHub API.', 'type': str,
+                                   'required': True}),
+        ]
+    )
+    def metadata(self):
+        """Metadata sub-command."""
+        self.app.handler.get('handlers', self.app.pargs.name, setup=True).add_metadata()

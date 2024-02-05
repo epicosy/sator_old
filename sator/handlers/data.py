@@ -202,7 +202,7 @@ class DataHandler(SourceHandler):
                 for cvss_data in metrics["cvssMetricV31"]:
                     cvss3_instance = CVSS3(
                                
-                                cve_id = cve_id,
+                                vulnerability_id = cve_id,
                                 source=cvss_data['source'],
                                 type=cvss_data['type'],
                                 exploitabilityScore=cvss_data['exploitabilityScore'],
@@ -226,7 +226,7 @@ class DataHandler(SourceHandler):
                 for cvss_data_v2 in metrics["cvssMetricV2"]:
                     cvss2_instance = CVSS2(
                                
-                                cve_id = cve_id,
+                                vulnerability_id = cve_id,
                                 source=cvss_data_v2['source'],
                                 type=cvss_data_v2['type'],
                                 cvssData_version=cvss_data_v2['cvssData']['version'],

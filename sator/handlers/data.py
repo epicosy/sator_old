@@ -28,6 +28,7 @@ class DataHandler(SourceHandler):
         super().__init__(**kw)
 
     def run(self):
+        print("hahahahahahha")
         self.init_global_context()
         months = ['0'+str(i) for i in range(1,10)]+['10','11','12']
         for year in (range(2023, 2024, 1)):
@@ -93,6 +94,8 @@ class DataHandler(SourceHandler):
 
 
     def _process_cve(self, cve_id: str, cve: dict):
+        print("here")
+        print(cve)
         for i,j in cve.items():
             print(i)
             print(j)
@@ -104,7 +107,7 @@ class DataHandler(SourceHandler):
                                          assigner=self.get_assigner(cve),
                                          published_date=self.get_published_date(cve),
                                          last_modified_date=self.get_last_modified_date(cve),
-                                         vulnStatus = ""),
+                                         vulnStatus = self.get_status(cve)),
                                        )
 
             db.session.commit()
@@ -339,6 +342,14 @@ class DataHandler(SourceHandler):
                 configs.append(cpe)
 
         return configs
+    @staticmethod
+    def get_status(data):
+       if 'vulnStatus' not in data:
+        return ""
+       else:
+        return data['vulnStatus']
+
+
 
 
 def load(app):

@@ -162,58 +162,64 @@ class NVDHandler(SourceHandler):
             if "baseMetricV3" in metrics:
                 base_metric_v3 = metrics["baseMetricV3"]
                 cvss_v3 = base_metric_v3["cvssV3"]  # Access the 'cvssV3' dictionary directly
-
+                cvss_v3_id = self.get_digest(json.dumps(cvss_v3))
                 # Create a CVSS3 instance with the extracted data
-                cvss3_instance = CVSS3(
-                    vulnerability_id=cve_id,
-                    # The original code incorrectly accessed 'source' and 'type' which aren't in the 'cvssV3' structure
-                    # Assuming 'source' and 'type' need to be handled differently or removed if not applicable
-                    exploitabilityScore=base_metric_v3['exploitabilityScore'],
-                    impactScore=base_metric_v3['impactScore'],
-                    cvssData_version=cvss_v3['version'],
-                    cvssData_vectorString=cvss_v3['vectorString'],
-                    cvssData_attackVector=cvss_v3['attackVector'],
-                    cvssData_attackComplexity=cvss_v3['attackComplexity'],
-                    cvssData_privilegesRequired=cvss_v3['privilegesRequired'],
-                    cvssData_userInteraction=cvss_v3['userInteraction'],
-                    cvssData_scope=cvss_v3['scope'],
-                    cvssData_confidentialityImpact=cvss_v3['confidentialityImpact'],
-                    cvssData_integrityImpact=cvss_v3['integrityImpact'],
-                    cvssData_availabilityImpact=cvss_v3['availabilityImpact'],
-                    cvssData_baseScore=cvss_v3['baseScore'],
-                    cvssData_baseSeverity=cvss_v3['baseSeverity']
-                )
-                db.session.add(cvss3_instance)
-                db.session.commit()
+                if not self.has_id(cvss_v3_id, 'cvss3'):
+                    self.add_id(cvss_v3_id, 'cvss3')
+                    cvss3_instance = CVSS3(
+                        id = cvss_v3_id,
+                        vulnerability_id=cve_id,
+                        # The original code incorrectly accessed 'source' and 'type' which aren't in the 'cvssV3' structure
+                        # Assuming 'source' and 'type' need to be handled differently or removed if not applicable
+                        exploitabilityScore=base_metric_v3['exploitabilityScore'],
+                        impactScore=base_metric_v3['impactScore'],
+                        cvssData_version=cvss_v3['version'],
+                        cvssData_vectorString=cvss_v3['vectorString'],
+                        cvssData_attackVector=cvss_v3['attackVector'],
+                        cvssData_attackComplexity=cvss_v3['attackComplexity'],
+                        cvssData_privilegesRequired=cvss_v3['privilegesRequired'],
+                        cvssData_userInteraction=cvss_v3['userInteraction'],
+                        cvssData_scope=cvss_v3['scope'],
+                        cvssData_confidentialityImpact=cvss_v3['confidentialityImpact'],
+                        cvssData_integrityImpact=cvss_v3['integrityImpact'],
+                        cvssData_availabilityImpact=cvss_v3['availabilityImpact'],
+                        cvssData_baseScore=cvss_v3['baseScore'],
+                        cvssData_baseSeverity=cvss_v3['baseSeverity']
+                    )
+                    db.session.add(cvss3_instance)
+                    db.session.commit()
 
 
 
             if "baseMetricV2" in metrics:
                 base_metric_v2 = metrics["baseMetricV2"]
                 cvss_v2 = base_metric_v2["cvssV2"]  # Direct access to the "cvssV2" dictionary
-
-                cvss2_instance = CVSS2(
-                    vulnerability_id=cve_id,
-                    cvssData_version=cvss_v2['version'],
-                    cvssData_vectorString=cvss_v2['vectorString'],
-                    cvssData_accessVector=cvss_v2['accessVector'],
-                    cvssData_accessComplexity=cvss_v2['accessComplexity'],
-                    cvssData_authentication=cvss_v2['authentication'],
-                    cvssData_confidentialityImpact=cvss_v2['confidentialityImpact'],
-                    cvssData_integrityImpact=cvss_v2['integrityImpact'],
-                    cvssData_availabilityImpact=cvss_v2['availabilityImpact'],
-                    cvssData_baseScore=cvss_v2['baseScore'],
-                    baseSeverity=base_metric_v2['severity'],
-                    exploitabilityScore=base_metric_v2['exploitabilityScore'],
-                    impactScore=base_metric_v2['impactScore'],
-                    acInsufInfo=base_metric_v2.get("acInsufInfo",False),
-                    obtainAllPrivilege=base_metric_v2['obtainAllPrivilege'],
-                    obtainUserPrivilege=base_metric_v2['obtainUserPrivilege'],
-                    obtainOtherPrivilege=base_metric_v2['obtainOtherPrivilege'],
-                    userInteractionRequired=base_metric_v2['userInteractionRequired']
-                )
-                db.session.add(cvss2_instance)
-                db.session.commit()
+                cvss_v2_id = self.get_digest(json.dumps(cvss_v2))
+                if not self.has_id(cvss_v2_id, 'cvss2'):
+                    self.add_id(cvss_v2_id, 'cvss2')
+                    cvss2_instance = CVSS2(
+                        id = cvss_v2_id,
+                        vulnerability_id=cve_id,
+                        cvssData_version=cvss_v2['version'],
+                        cvssData_vectorString=cvss_v2['vectorString'],
+                        cvssData_accessVector=cvss_v2['accessVector'],
+                        cvssData_accessComplexity=cvss_v2['accessComplexity'],
+                        cvssData_authentication=cvss_v2['authentication'],
+                        cvssData_confidentialityImpact=cvss_v2['confidentialityImpact'],
+                        cvssData_integrityImpact=cvss_v2['integrityImpact'],
+                        cvssData_availabilityImpact=cvss_v2['availabilityImpact'],
+                        cvssData_baseScore=cvss_v2['baseScore'],
+                        baseSeverity=base_metric_v2['severity'],
+                        exploitabilityScore=base_metric_v2['exploitabilityScore'],
+                        impactScore=base_metric_v2['impactScore'],
+                        acInsufInfo=base_metric_v2.get("acInsufInfo",False),
+                        obtainAllPrivilege=base_metric_v2['obtainAllPrivilege'],
+                        obtainUserPrivilege=base_metric_v2['obtainUserPrivilege'],
+                        obtainOtherPrivilege=base_metric_v2['obtainOtherPrivilege'],
+                        userInteractionRequired=base_metric_v2['userInteractionRequired']
+                    )
+                    db.session.add(cvss2_instance)
+                    db.session.commit()
 
 
     @staticmethod

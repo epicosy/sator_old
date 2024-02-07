@@ -64,23 +64,46 @@ class Query(CountsQuery, ObjectsQuery, PaginationQuery, ObjectType):
     datasets_overlap = graphene.Float(src_id=graphene.Int(), tgt_id=graphene.Int())
     functions = graphene.List(lambda: MethodBoundary, file_id=graphene.String())
      
-    profile_count = graphene.Field(lambda: ProfileCount, start_year = graphene.Int(), end_year= graphene.Int(), cwe_ids= graphene.List(graphene.Int),
-                            start_score= graphene.Float(), end_score= graphene.Float(), has_code= graphene.Boolean(),
-                            has_exploit= graphene.Boolean(), has_advisory= graphene.Boolean())
+    # profile_count = graphene.Field(lambda: ProfileCount, start_year = graphene.Int(), end_year= graphene.Int(), cwe_ids= graphene.List(graphene.Int),
+    #                         start_score= graphene.Float(), end_score= graphene.Float(), has_code= graphene.Boolean(),
+    #                         has_exploit= graphene.Boolean(), has_advisory= graphene.Boolean())
 
+    profile_count = graphene.Field(
+        lambda: ProfileCount,
+        start_year=graphene.Int(),
+        end_year=graphene.Int(),
+        cwe_ids=graphene.List(graphene.Int),
+        start_exp_score=graphene.Float(),
+        end_exp_score=graphene.Float(),
+        has_commit=graphene.Boolean(),
+        has_exploit=graphene.Boolean(),
+        has_advisory=graphene.Boolean(),
+        vul_type=graphene.Boolean(),
+        num_lines=graphene.Int(),
+        extension=graphene.String(),
+        num_files=graphene.Int(),
+        language=graphene.String(),
+        repo_size=graphene.Int()
+    )
 
     def resolve_functions(self, info, file_id: str):
         return Function.get_query(info).filter_by(commit_file_id=file_id).order_by(FunctionModel.start).all()
     
 
-    def resolve_profile_count(self, info, start_year: int = None, end_year: int = None, cwe_ids: list[int] = None,
-                            start_score: float = None, end_score: float = None, has_code: bool = False,
-                            has_exploit: bool = False, has_advisory: bool = False):
+    def resolve_profile_count(self, info, start_year: int = None, end_year: int = None, 
+                              vul_type:bool=False, has_commit:bool=False,has_exploit: bool = False,
+                              has_advisory: bool = False,
+                              start_exp_score: float = None, end_exp_score: float = None,
+                              num_lines:int=0, extension:str="",num_files:int=0,
+                              language:str="",repo_size:int=0, 
+                              cwe_ids: list[int] = None
+                              
+                             ):
         
 
         query = Vulnerability.get_query(info)
 
-        if has_code:
+        if has_commit:
             # Subquery to check if there are any commits related to the vulnerability
             subquery = (
                 Commit.get_query(info)
@@ -96,7 +119,7 @@ class Query(CountsQuery, ObjectsQuery, PaginationQuery, ObjectType):
             raise GraphQLError("Invalid date range")
 
         # check if start_score and end_score are valid
-        if start_score and end_score and start_score > end_score:
+        if start_exp_score and end_exp_score and start_exp_score > end_exp_score:
             raise GraphQLError("Invalid score range")
 
         if start_year:
@@ -108,12 +131,26 @@ class Query(CountsQuery, ObjectsQuery, PaginationQuery, ObjectType):
         if cwe_ids:
             query = query.join(VulnerabilityCWEModel).filter(VulnerabilityCWEModel.cwe_id.in_(cwe_ids))
         # Filtering by score range using CVSS3  scores
-        if start_score is not None or end_score is not None:
+        if start_exp_score is not None or end_exp_score is not None:
             query = query.join(CVSS3Model)  
-            if start_score is not None:
-                query = query.filter(CVSS3Model.exploitabilityScore >= start_score)
-            if end_score is not None:
-                query = query.filter(CVSS3Model.exploitabilityScore <= end_score)
+            if start_exp_score is not None:
+                query = query.filter(CVSS3Model.exploitabilityScore >= start_exp_score)
+            if end_exp_score is not None:
+                query = query.filter(CVSS3Model.exploitabilityScore <= end_exp_score)
+
+
+        if language:
+      
+            commit_language_subquery = (
+                Commit.get_query(info)
+                .join(Repository, Repository.id == CommitModel.repository_id)  # Adjust with correct foreign key column
+                .filter(Repository.language == language)
+                .filter(CommitModel.vulnerability_id == VulnerabilityModel.id)
+                .exists()
+            )
+
+            # Apply the refined subquery
+            query = query.filter(commit_language_subquery)
 
         year_counts = query.group_by(
             func.extract('year', VulnerabilityModel.published_date)
@@ -138,10 +175,7 @@ class Query(CountsQuery, ObjectsQuery, PaginationQuery, ObjectType):
         ).all()
 
 
-        # return ProfileCount(year=[GrapheneCount(key=year, value=count) for year, count in year_counts],
-        #                     cwe=[GrapheneCount(key=cwe_id, value=count) for cwe_id, count in cwe_counts],
-        #                     score=[GrapheneCount(key=score, value=count) for score, count in score_counts],
-        #                     total=query.count())
+
         return ProfileCount(year=[GrapheneCount(key=year, value=count) for year, count in year_counts],
                             cwe=[GrapheneCount(key=cwe_id, value=count) for cwe_id, count in cwe_counts],
                             score=[GrapheneCount(key=score, value=count) for score, count in score_counts],

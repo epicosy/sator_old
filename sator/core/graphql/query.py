@@ -2,13 +2,13 @@ from sqlalchemy.orm import aliased
 
 import graphene
 import sqlalchemy
-
+from sqlalchemy.sql import func
 from graphene import ObjectType
 from graphql import GraphQLError
 # from graphql_relay import to_global_id
-
+from sator.core.graphql.objects import GrapheneCount
 from sator.core.graphql.objects import CWE, Vulnerability, VulnerabilityModel, VulnerabilityCWE, CommitFileModel, \
-    VulnerabilityCWEModel, Reference, Commit, Repository, CommitModel, ConfigurationModel, RepositoryModel, \
+    VulnerabilityCWEModel, CVSS3Model, CVSS2Model, Reference, Commit, Repository, CommitModel, ConfigurationModel, RepositoryModel, \
     ProductModel, ProductTypeModel, DatasetVulnerability, DatasetVulnerabilityModel, Line, LineModel, Function,\
     FunctionModel
 
@@ -47,6 +47,11 @@ class MethodBoundary(ObjectType):
     end = graphene.Field(lambda: Position)
     code = graphene.List(graphene.String)
 
+class ProfileCount(ObjectType):
+    total = graphene.Int()
+    year = graphene.List(lambda: GrapheneCount)
+    cwe = graphene.List(lambda: GrapheneCount)
+    score = graphene.List(lambda: GrapheneCount)
 
 class Query(CountsQuery, ObjectsQuery, PaginationQuery, ObjectType):
     stats = graphene.Field(Stats)
@@ -58,9 +63,94 @@ class Query(CountsQuery, ObjectsQuery, PaginationQuery, ObjectType):
     search_vulnerability = graphene.List(lambda: Vulnerability, keyword=graphene.String(), limit=graphene.Int())
     datasets_overlap = graphene.Float(src_id=graphene.Int(), tgt_id=graphene.Int())
     functions = graphene.List(lambda: MethodBoundary, file_id=graphene.String())
+     
+    profile_count = graphene.Field(lambda: ProfileCount, start_year = graphene.Int(), end_year= graphene.Int(), cwe_ids= graphene.List(graphene.Int),
+                            start_score= graphene.Float(), end_score= graphene.Float(), has_code= graphene.Boolean(),
+                            has_exploit= graphene.Boolean(), has_advisory= graphene.Boolean())
+
 
     def resolve_functions(self, info, file_id: str):
         return Function.get_query(info).filter_by(commit_file_id=file_id).order_by(FunctionModel.start).all()
+    
+
+    def resolve_profile_count(self, info, start_year: int = None, end_year: int = None, cwe_ids: list[int] = None,
+                            start_score: float = None, end_score: float = None, has_code: bool = False,
+                            has_exploit: bool = False, has_advisory: bool = False):
+        
+
+        query = Vulnerability.get_query(info)
+
+        if has_code:
+            # Subquery to check if there are any commits related to the vulnerability
+            subquery = (
+                Commit.get_query(info)
+                .filter(CommitModel.vulnerability_id == VulnerabilityModel.id)
+                .exists()
+            )
+
+            # Apply the exists condition to the main query
+            query = query.filter(subquery)
+
+        # check if start_year and end_year are valid
+        if start_year and end_year and start_year > end_year:
+            raise GraphQLError("Invalid date range")
+
+        # check if start_score and end_score are valid
+        if start_score and end_score and start_score > end_score:
+            raise GraphQLError("Invalid score range")
+
+        if start_year:
+            query = query.filter(VulnerabilityModel.published_date >= f'{start_year}-01-01')
+
+        if end_year:
+            query = query.filter(VulnerabilityModel.published_date <= f'{end_year}-12-31')
+
+        if cwe_ids:
+            query = query.join(VulnerabilityCWEModel).filter(VulnerabilityCWEModel.cwe_id.in_(cwe_ids))
+        # Filtering by score range using CVSS3  scores
+        if start_score is not None or end_score is not None:
+            query = query.join(CVSS3Model)  
+            if start_score is not None:
+                query = query.filter(CVSS3Model.exploitabilityScore >= start_score)
+            if end_score is not None:
+                query = query.filter(CVSS3Model.exploitabilityScore <= end_score)
+
+        year_counts = query.group_by(
+            func.extract('year', VulnerabilityModel.published_date)
+        ).with_entities(
+            func.extract('year', VulnerabilityModel.published_date).label('year'),
+            func.count().label('count')
+        ).all()
+
+        cwe_counts = query.group_by(
+            VulnerabilityCWEModel.cwe_id
+        ).with_entities(
+            VulnerabilityCWEModel.cwe_id,
+            func.count().label('count')
+        ).all()
+
+
+        score_counts = query.group_by(
+            CVSS3Model.exploitabilityScore
+        ).with_entities(
+            CVSS3Model.exploitabilityScore.label('score'),
+            func.count(VulnerabilityModel.id).label('count')
+        ).all()
+
+
+        # return ProfileCount(year=[GrapheneCount(key=year, value=count) for year, count in year_counts],
+        #                     cwe=[GrapheneCount(key=cwe_id, value=count) for cwe_id, count in cwe_counts],
+        #                     score=[GrapheneCount(key=score, value=count) for score, count in score_counts],
+        #                     total=query.count())
+        return ProfileCount(year=[GrapheneCount(key=year, value=count) for year, count in year_counts],
+                            cwe=[GrapheneCount(key=cwe_id, value=count) for cwe_id, count in cwe_counts],
+                            score=[GrapheneCount(key=score, value=count) for score, count in score_counts],
+                            total=query.count())
+
+
+
+
+
 
     def resolve_datasets_overlap(self, info, src_id: int, tgt_id: int):
         src_dataset_vulns = DatasetVulnerability.get_query(info).filter(DatasetVulnerabilityModel.dataset_id == src_id).all()

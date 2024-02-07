@@ -11,7 +11,7 @@ from sator.core.models import CWE as CWEModel, Abstraction as AbstractionModel, 
     CommitFile as CommitFileModel, ProductType as ProductTypeModel, RepositoryTopic as RepositoryTopicModel, \
     Topic as TopicModel, ConfigurationVulnerability as ConfigurationVulnerabilityModel, Grouping as GroupingModel, \
     Dataset as DatasetModel, DatasetVulnerability as DatasetVulnerabilityModel, Line as LineModel, \
-    RepositoryProductType as RepositoryProductTypeModel, Function as FunctionModel
+    RepositoryProductType as RepositoryProductTypeModel, Function as FunctionModel , CVSS3 as CVSS3Model, CVSS2 as CVSS2Model
 
 
 class GrapheneCount(graphene.ObjectType):
@@ -314,6 +314,14 @@ class VulnerabilityCWE(SQLAlchemyObjectType):
         model = VulnerabilityCWEModel
         use_connection = True
 
+class CVSS3(SQLAlchemyObjectType):
+    class Meta:
+        model = CVSS3Model
+        use_connection = True
+class CVSS2(SQLAlchemyObjectType):
+    class Meta:
+        model = CVSS2Model
+        use_connection = True
 
 class Vulnerability(SQLAlchemyObjectType):
     class Meta:

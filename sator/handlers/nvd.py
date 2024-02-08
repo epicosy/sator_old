@@ -88,6 +88,7 @@ class NVDHandler(SourceHandler):
                 db.session.commit()
 
             if self.is_commit_reference(ref['url']):
+                
 
                 try:
                     normalized_commit = self.normalize_commit(ref['url'])
@@ -96,6 +97,7 @@ class NVDHandler(SourceHandler):
 
                     if not self.has_id(repo_digest, 'repos'):
                         self.add_id(repo_digest, 'repos')
+          
                         db.session.add(Repository(id=repo_digest, name=normalized_commit.repo,
                                                   owner=normalized_commit.owner))
                         db.session.commit()

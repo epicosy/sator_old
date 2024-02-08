@@ -155,6 +155,7 @@ class DataHandler(SourceHandler):
 
             for raw_config in configurations:
                 config = self.parse_config(raw_config)
+                print(config["language"])
                 config_digest = self.get_digest(config['cpe'])
                 config_vuln = f"{config_digest}_{cve_id}"
 

@@ -32,7 +32,6 @@ class Source(Controller):
     def collect(self):
         self.app.handler.get('handlers', self.app.pargs.name, setup=True).run()
 
-
     @ex(
         help='Gets data from GitHub',
         arguments=[

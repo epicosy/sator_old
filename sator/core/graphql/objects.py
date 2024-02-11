@@ -11,12 +11,33 @@ from sator.core.models import CWE as CWEModel, Abstraction as AbstractionModel, 
     CommitFile as CommitFileModel, ProductType as ProductTypeModel, RepositoryTopic as RepositoryTopicModel, \
     Topic as TopicModel, ConfigurationVulnerability as ConfigurationVulnerabilityModel, Grouping as GroupingModel, \
     Dataset as DatasetModel, DatasetVulnerability as DatasetVulnerabilityModel, Line as LineModel, \
-    RepositoryProductType as RepositoryProductTypeModel, Function as FunctionModel
+    RepositoryProductType as RepositoryProductTypeModel, Function as FunctionModel, Profile, ProfileCWE, Weakness
 
 
 class GrapheneCount(graphene.ObjectType):
     key = graphene.String()
     value = graphene.Int()
+
+
+class ProfileObject(SQLAlchemyObjectType):
+    class Meta:
+        model = Profile
+        use_connection = True
+
+    id = graphene.Int()
+    name = graphene.String()
+
+    def resolve_id(self, info):
+        return self.id
+
+    def resolve_name(self, info):
+        return self.name
+
+
+class ProfileCWEObject(SQLAlchemyObjectType):
+    class Meta:
+        model = ProfileCWE
+        use_connection = True
 
 
 class RepositoryProductType(SQLAlchemyObjectType):
@@ -41,6 +62,21 @@ class DatasetVulnerability(SQLAlchemyObjectType):
     class Meta:
         model = DatasetVulnerabilityModel
         use_connection = True
+
+
+class WeaknessObject(SQLAlchemyObjectType):
+    class Meta:
+        model = Weakness
+        use_connection = True
+
+    id = graphene.Int()
+    tuple = graphene.String()
+
+    def resolve_id(self, info):
+        return self.id
+
+    def resolve_tuple(self, info):
+        return self.tuple
 
 
 class Dataset(SQLAlchemyObjectType):
@@ -320,15 +356,28 @@ class Vulnerability(SQLAlchemyObjectType):
         model = VulnerabilityModel
         use_connection = True
 
+    id = graphene.String()
     cwe_ids = graphene.List(lambda: CWE)
     references = graphene.List(lambda: Reference)
     commits = graphene.List(lambda: Commit)
+    rootWeakness = graphene.String()
+
+    def resolve_id(self, info):
+        return self.id
 
     def resolve_commits(self, info):
         commits_query = Commit.get_query(info=info)
         commits_query = commits_query.filter(CommitModel.vulnerability_id == self.id)
 
         return commits_query.all()
+
+    def resolve_rootWeakness(self, info):
+        weakness = WeaknessObject.get_query(info=info).filter(Weakness.vulnerability_id == self.id).first()
+
+        if weakness:
+            return weakness.tuple
+
+        return None
 
     def resolve_references(self, info):
         references_query = Reference.get_query(info=info)

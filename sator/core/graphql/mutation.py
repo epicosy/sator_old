@@ -1,27 +1,109 @@
 import graphene
 
+from typing import List
 from graphene import ObjectType
 from graphql import GraphQLError
 from sator.core.graphql.objects import Dataset, DatasetModel, Vulnerability, DatasetVulnerability, VulnerabilityModel, \
     DatasetVulnerabilityModel, CommitFile, LineModel, Line, Repository, ProductType, RepositoryProductType, \
-    RepositoryProductTypeModel, Function, FunctionModel
+    RepositoryProductTypeModel, Function, FunctionModel, ProfileObject, Profile, ProfileCWE, ProfileCWEObject, \
+    CommitModel
 from sator.utils.misc import get_file_content_from_url, get_digest, JavaMethodExtractor
+from sator.core.graphql.query import profiling_vuln_query, profiling_commit_query
+
+
+class CreateProfile(graphene.Mutation):
+    class Arguments:
+        name = graphene.String(required=True)
+        has_code = graphene.Boolean(required=False)
+        has_exploit = graphene.Boolean(required=False)
+        has_advisory = graphene.Boolean(required=False)
+        start_year = graphene.Int(required=False)
+        end_year = graphene.Int(required=False)
+        start_score = graphene.Float(required=False)
+        end_score = graphene.Float(required=False)
+        min_changes = graphene.Int(required=False)
+        max_changes = graphene.Int(required=False)
+        min_files = graphene.Int(required=False)
+        max_files = graphene.Int(required=False)
+        extensions = graphene.List(graphene.String, required=False)
+        cwe_ids = graphene.List(graphene.Int, required=False)
+
+    profile = graphene.Field(lambda: ProfileObject)
+
+    def mutate(self, info, name: str, start_year: int = 1987, end_year: int = None, cwe_ids: List[int] = None,
+               start_score: float = 0, end_score: float = 10, has_code: bool = False, has_exploit: bool = False,
+               has_advisory: bool = False, min_changes: int = 0, max_changes: int = None, min_files: int = 0,
+               max_files: int = None, extensions: List[str] = None):
+
+        if ProfileObject.get_query(info).filter_by(name=name).first():
+            raise GraphQLError(f"Profile with name {name} already exists")
+
+        if not cwe_ids:
+            cwe_ids = []
+
+        if not extensions:
+            extension = None
+        else:
+            # TODO: change this to cover for multiple extensions
+            extension = extensions[0]
+
+        profile = Profile(name=name, start_year=start_year, end_year=end_year, start_score=start_score,
+                          end_score=end_score, min_changes=min_changes, max_changes=max_changes, min_files=min_files,
+                          max_files=max_files, has_code=has_code, has_exploit=has_exploit, has_advisory=has_advisory,
+                          extension=extension)
+        profile.save()
+
+        for cwe_id in cwe_ids:
+            profile_cwe = ProfileCWE(profile_id=profile.id, cwe_id=cwe_id)
+            profile_cwe.save()
+
+        # TODO: check if we need to add all fields to the profile object
+        profile = ProfileObject(id=profile.id, name=name)
+
+        return CreateProfile(profile=profile)
 
 
 class CreateDataset(graphene.Mutation):
     class Arguments:
         name = graphene.String(required=True)
         description = graphene.String(required=False)
+        profile_id = graphene.Int(required=False)
 
     dataset = graphene.Field(lambda: Dataset)
 
-    def mutate(self, info, name, description=None):
+    def mutate(self, info, name, description=None, profile_id=None):
 
         if Dataset.get_query(info).filter_by(name=name).first():
             raise GraphQLError(f"Dataset with name {name} already exists")
 
+        cve_ids = []
+
+        if profile_id:
+            profile = ProfileObject.get_query(info).filter_by(id=profile_id).first()
+
+            if not profile:
+                raise GraphQLError(f"Profile with id {profile_id} does not exist")
+
+            # get cwe_ids from the profile
+            cwe_ids = [r.cwe_id for r in ProfileCWEObject.get_query(info).filter_by(profile_id=profile_id).all()]
+            extensions = [profile.extension] if profile.extension else None
+            vuln_query = profiling_vuln_query(info, start_year=profile.start_year, end_year=profile.end_year,
+                                              start_score=profile.start_score, end_score=profile.end_score,
+                                              cwe_ids=cwe_ids, has_exploit=profile.has_exploit,
+                                              has_advisory=profile.has_advisory)
+            commit_query = profiling_commit_query(info, vuln_query, min_changes=profile.min_changes,
+                                                  max_changes=profile.max_changes, min_files=profile.min_files,
+                                                  max_files=profile.max_files, extensions=extensions)
+
+            # get distinct cve_ids from commit_query
+            cve_ids = [c.vulnerability_id for c in commit_query.with_entities(CommitModel.vulnerability_id).distinct().all()]
+
         dataset = DatasetModel(name=name, description=description)
         dataset.save()
+
+        for cve_id in cve_ids:
+            dataset_vulnerability = DatasetVulnerabilityModel(dataset_id=dataset.id, vulnerability_id=cve_id)
+            dataset_vulnerability.save()
 
         dataset = Dataset(id=dataset.id, name=name, description=description)
 
@@ -255,6 +337,7 @@ class RepositorySoftwareType(graphene.Mutation):
 
 class Mutation(ObjectType):
     create_dataset = CreateDataset.Field()
+    create_profile = CreateProfile.Field()
     remove_dataset = RemoveDataset.Field()
     remove_dataset_vulnerabilities = RemoveDatasetVulnerabilities.Field()
     add_vulnerabilities_to_dataset = AddDatasetVulnerabilities.Field()

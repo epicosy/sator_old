@@ -1,3 +1,5 @@
+Archived due to reset that replaced recent commits to main with SPT commits from 2 weeks ago.
+
 # Sator: a vulnerability database API
 
 ## Installation

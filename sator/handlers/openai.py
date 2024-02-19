@@ -5,9 +5,9 @@ import openai
 
 from tqdm import tqdm
 
-from sator.core.models import Repository, ProductType, RepositoryProductType, db
+from sator.core.models import Repository, ProductType, RepositoryProductType, db, Completion
 from sator.handlers.source import SourceHandler
-from sator.core.openai.prompts import get_repository_software_type
+from sator.core.openai.prompts import get_repository_software_type, label_patch_root_cause
 from sator.core.openai.utils import extract_dictionary
 from github.GithubException import UnknownObjectException
 
@@ -31,6 +31,39 @@ class OpenAIHandler(SourceHandler):
         except openai.error.OpenAIError as e:
             self.app.log.error(f"Error while connecting to OpenAI API: {e}")
             exit(1)
+
+    def label_diff(self, diff: str, cwe_id: str) -> Union[Completion, None]:
+        try:
+            messages = label_patch_root_cause(diff=diff, cwe_id=cwe_id)
+            completion = openai.ChatCompletion.create(model='gpt-3.5-turbo', max_tokens=100, n=1, messages=messages)
+            # TODO: should we keep the completions for later access or save in our database and delete them from openai?
+            completion_model = Completion(id=completion.id, model=completion.model, object=completion.object,
+                                          created=completion.created, prompt=str(messages),
+                                          completion=completion.choices[0].message['content'],
+                                          finish_reason=completion.choices[0]['finish_reason'],
+                                          prompt_tokens=completion.usage["prompt_tokens"],
+                                          total_tokens=completion.usage["total_tokens"],
+                                          completion_tokens=completion.usage["completion_tokens"])
+            completion_model.save()
+            time.sleep(1.5)
+            return completion_model
+        except openai.error.RateLimitError as e:
+            self.app.log.error(f"Rate limit error: {e}")
+
+            if self.timed_out:
+                self.app.log.warning(f"API exhausted. Terminating.")
+                exit(1)
+
+            self.timed_out = True
+            time.sleep(1.5)
+
+        except openai.error.OpenAIError as e:
+            self.app.log.error(f"Error while generating text: {e}")
+        except ValueError as e:
+            self.app.log.error(f"Error while generating text: {e}")
+
+        return None
+
 
     def _generate_software_type(self, name: str, description: str, read_me: str) -> Union[str, None]:
         try:

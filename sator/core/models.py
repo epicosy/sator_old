@@ -278,6 +278,11 @@ class Repository(db.Model):
     available = db.Column('available', db.Boolean, nullable=True)
     description = db.Column('description', db.String, nullable=True)
     language = db.Column('language', db.String, nullable=True)
+    size = db.Column('size', db.Integer, nullable=True)
+    watchers = db.Column('watchers', db.Integer, nullable=True)
+    forks = db.Column('forks', db.Integer, nullable=True)
+    stargazers = db.Column('stargazers', db.Integer, nullable=True)
+    commits_count = db.Column('commits_count', db.Integer, nullable=True)
     commits = db.relationship("Commit", backref="repository")
 
     def save(self):
@@ -556,6 +561,77 @@ class DatasetVulnerability(db.Model):
 
     def remove(self):
         db.session.delete(self)
+        db.session.commit()
+
+
+class Profile(db.Model):
+    __tablename__ = "profile"
+
+    id = db.Column('id', db.Integer, primary_key=True)
+    name = db.Column('name', db.String, nullable=False)
+    has_code = db.Column('has_code', db.Boolean, nullable=False)
+    has_exploit = db.Column('has_exploit', db.Boolean, nullable=False)
+    has_advisory = db.Column('has_advisory', db.Boolean, nullable=False)
+    start_year = db.Column('start_year', db.Integer, nullable=False)
+    end_year = db.Column('end_year', db.Integer, nullable=True)
+    start_score = db.Column('start_score', db.Float, nullable=False)
+    end_score = db.Column('end_score', db.Float, nullable=False)
+    min_changes = db.Column('min_changes', db.Integer, nullable=False)
+    max_changes = db.Column('max_changes', db.Integer, nullable=True)
+    min_files = db.Column('min_files', db.Integer, nullable=False)
+    max_files = db.Column('max_files', db.Integer, nullable=True)
+    # TODO: make it a relationship to hold more extensions
+    extension = db.Column('extension', db.String, nullable=True)
+    # TODO: should include the size / count
+
+    def save(self):
+        db.session.add(self)
+        db.session.commit()
+
+
+class ProfileCWE(db.Model):
+    __tablename__ = 'profile_cwe'
+    __table_args__ = (
+        db.PrimaryKeyConstraint('profile_id', 'cwe_id'),
+    )
+
+    profile_id = db.Column('profile_id', db.Integer, db.ForeignKey('profile.id'))
+    cwe_id = db.Column('cwe_id', db.Integer, db.ForeignKey('cwe.id'))
+
+    def save(self):
+        db.session.add(self)
+        db.session.commit()
+
+
+class Completion(db.Model):
+    __tablename__ = "completion"
+
+    id = db.Column('id', db.String, primary_key=True)
+    object = db.Column('object', db.String, nullable=False)
+    created = db.Column('created', db.Integer, nullable=False)
+    model = db.Column('model', db.String, nullable=False)
+    prompt = db.Column('prompt', db.String, nullable=False)
+    completion = db.Column('completion', db.String, nullable=False)
+    finish_reason = db.Column('finish_reason', db.String, nullable=False)
+    prompt_tokens = db.Column('prompt_tokens', db.Integer, nullable=False)
+    completion_tokens = db.Column('completion_tokens', db.Integer, nullable=False)
+    total_tokens = db.Column('total_tokens', db.Integer, nullable=False)
+
+    def save(self):
+        db.session.add(self)
+        db.session.commit()
+
+
+class Weakness(db.Model):
+    __tablename__ = "weakness"
+
+    id = db.Column('id', db.Integer, primary_key=True)
+    tuple = db.Column('tuple', db.String, nullable=True)
+    vulnerability_id = db.Column('vulnerability_id', db.String, db.ForeignKey('vulnerability.id'))
+    completion_id = db.Column('completion_id', db.String, db.ForeignKey('completion.id'))
+
+    def save(self):
+        db.session.add(self)
         db.session.commit()
 
 

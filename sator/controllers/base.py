@@ -45,17 +45,6 @@ class Base(Controller):
         self.app.args.print_help()
 
     @ex(
-        help='Gets data from GitHub',
-        arguments=[
-            (['-gt', '--tokens'], {'help': 'Comma-separated list of tokens for the GitHub API.', 'type': str,
-                                   'required': True}),
-        ]
-    )
-    def metadata(self):
-        """Metadata sub-command."""
-        self.app.handler.get('handlers', 'nvd', setup=True).add_metadata()
-
-    @ex(
         help='Generates with OpenAI API the software type for each repository in the database',
         arguments=[
             (['-gt', '--tokens'], {'help': 'Comma-separated list of tokens for the GitHub API.', 'type': str,

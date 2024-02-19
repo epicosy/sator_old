@@ -258,6 +258,11 @@ class SourceHandler(HandlersInterface, Handler):
         repo_model.available = True
         repo_model.language = repo.language
         repo_model.description = repo.description
+        repo_model.size = repo.size
+        repo_model.stars = repo.stargazers_count
+        repo_model.forks = repo.forks_count
+        repo_model.watchers = repo.watchers_count
+        repo_model.commits_count = repo.get_commits().totalCount
 
         for topic in repo.topics:
             topic_digest = self.get_digest(topic)
@@ -336,12 +341,12 @@ class SourceHandler(HandlersInterface, Handler):
 
         return False
 
-    def update_parent_commit(self, repo_model: Repository, commit_model: Commit, parent: GitCommit) -> str:
+    def update_parent_commit(self, commit_model: Commit, parent: GitCommit) -> str:
         parent_digest = self.get_digest(parent.url)
 
         if not self.has_id(parent_digest, 'commits'):
             db.session.add(Commit(id=parent_digest, kind='parent', url=parent.url,
-                                  repository_id=repo_model.id, sha=parent.sha,
+                                  repository_id=commit_model.repository_id, sha=parent.sha,
                                   vulnerability_id=commit_model.vulnerability_id))
             db.session.commit()
             self.add_id(parent_digest, 'commits')
@@ -357,7 +362,7 @@ class SourceHandler(HandlersInterface, Handler):
                 commit = self.github_handler.get_commit(repo, commit_sha=commit_model.sha)
 
             for parent in commit.commit.parents:
-                parent_digest = self.update_parent_commit(repo, commit_model, parent)
+                parent_digest = self.update_parent_commit(commit_model, parent)
 
                 if parent_digest not in parent_commits:
                     db.session.add(CommitParent(commit_id=commit_model.id, parent_id=parent_digest))

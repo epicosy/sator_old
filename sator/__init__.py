@@ -8,9 +8,11 @@ from flask_cors import CORS
 from sator.core.graphql.schema import schema
 
 
-def create_flask_app(configs: dict):
+def create_flask_app(configs: dict, allowed_origins: list = None):
     flask_app = Flask(__name__)
-    CORS(flask_app)
+
+    CORS(flask_app, resources={r"/graphql/*": {"origins": allowed_origins if allowed_origins else []}})
+
     flask_app.config.update(configs)
 
     @flask_app.route("/")

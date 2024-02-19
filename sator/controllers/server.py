@@ -1,6 +1,7 @@
 from cement import Controller, ex
 
 from sator import create_flask_app
+from sator.utils.misc import get_allowed_origins
 
 
 class Server(Controller):
@@ -66,7 +67,10 @@ class Server(Controller):
             self._set_debug()
             self._set_secret_key()
 
-            flask_app = create_flask_app(configs=self.app.flask_configs)
+            allowed_origins = get_allowed_origins()
+            allowed_origins.append(f"http://{self.app.pargs.address}:*")
+            self.app.log.info(f"Allowed origins: {allowed_origins}")
+            flask_app = create_flask_app(configs=self.app.flask_configs, allowed_origins=allowed_origins)
 
             with flask_app.app_context():
                 from sator.core.models import db, shutdown_session
